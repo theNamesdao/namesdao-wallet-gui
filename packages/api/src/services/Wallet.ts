@@ -90,13 +90,15 @@ export default class Wallet extends Service {
     walletId: number,
     amount: string,
     fee: string,
-    address: string
+    address: string,
+    memos: string[], // should this be ?: ?
   ) {
     return this.command('send_transaction', {
       walletId,
       amount,
       fee,
       address,
+      memos, //
     });
   }
 
