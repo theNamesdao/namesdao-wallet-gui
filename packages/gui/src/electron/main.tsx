@@ -603,7 +603,7 @@ if (!handleSquirrelEvent()) {
             label: i18n._(/* i18n */ { id: 'Release Notes' }),
             click: () => {
               openExternal(
-                'https://github.com/Chia-Network/chia-blockchain/releases',
+                'https://github.com/theNamesdao/namesdao-wallet/releases',
               );
             },
           },
@@ -611,7 +611,7 @@ if (!handleSquirrelEvent()) {
             label: i18n._(/* i18n */ { id: 'Contribute on GitHub' }),
             click: () => {
               openExternal(
-                'https://github.com/Chia-Network/chia-blockchain/blob/main/CONTRIBUTING.md',
+                'https://github.com/theNamesdao/namesdao-wallet/blob/main/CONTRIBUTING.md',
               );
             },
           },
@@ -622,7 +622,7 @@ if (!handleSquirrelEvent()) {
             label: i18n._(/* i18n */ { id: 'Report an Issue...' }),
             click: () => {
               openExternal(
-                'https://github.com/Chia-Network/chia-blockchain/issues',
+                'https://github.com/theNamesdao/namesdao-wallet/issues',
               );
             },
           },
@@ -635,7 +635,7 @@ if (!handleSquirrelEvent()) {
           {
             label: i18n._(/* i18n */ { id: 'Follow on Twitter' }),
             click: () => {
-              openExternal('https://twitter.com/chia_project');
+              openExternal('https://twitter.com/theNamesdao');
             },
           },
         ],
@@ -645,10 +645,10 @@ if (!handleSquirrelEvent()) {
     if (process.platform === 'darwin') {
       // Chia Blockchain menu (Mac)
       template.unshift({
-        label: i18n._(/* i18n */ { id: 'Chia' }),
+        label: i18n._(/* i18n */ { id: 'Namesdao' }), // { id: 'Chia' }),
         submenu: [
           {
-            label: i18n._(/* i18n */ { id: 'About Chia Blockchain' }),
+            label: i18n._(/* i18n */ { id: 'About Namesdao .xch Wallet' }), //  'About Chia Blockchain' }),
             click: () => {
               openAbout();
             },
@@ -735,7 +735,7 @@ if (!handleSquirrelEvent()) {
           type: 'separator',
         },
         {
-          label: i18n._(/* i18n */ { id: 'About Chia Blockchain' }),
+          label: i18n._(/* i18n */ { id: 'About Namesdao .xch Wallet' }), //  'About Chia Blockchain' }),
           click() {
             openAbout();
           },

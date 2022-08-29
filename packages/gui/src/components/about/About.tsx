@@ -11,7 +11,7 @@ const GlobalStyle = createGlobalStyle`
     background-color: silver;
   }
 
-  body { 
+  body {
     margin: 0;
     display: flex;
     flex-direction: column;
@@ -117,6 +117,9 @@ export default function About(props: Props) {
         </StyledLink>
         <StyledSubTitle>{description}</StyledSubTitle>
         <Spacer />
+        <div className="copyright">Portions Copyright (c) {currentYear} Namesdao</div>
+        <Spacer />
+        <Spacer />
         <div className="copyright">Copyright (c) {currentYear} Chia Network</div>
         <Spacer />
         <VersionsTable>
@@ -147,7 +150,7 @@ export default function About(props: Props) {
         </VersionsTable>
 
         <BugReport
-          href="https://github.com/Chia-Network/chia-blockchain/issues"
+          href="https://github.com/theNamesdao/namesdao-wallet/issues"
           target="_blank"
         >
           Report an issue
