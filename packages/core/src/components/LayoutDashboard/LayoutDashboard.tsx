@@ -95,7 +95,7 @@ export default function LayoutDashboard(props: LayoutDashboardProps) {
                   <Flex alignItems="center" flexGrow={1} justifyContent="space-between" flexWrap="wrap" gap={1}>
                     <Box>
                       <Typography variant="h4">
-                        <Trans>Wallet</Trans>
+                        <Trans>Namesdao .xch Wallet</Trans>
                         &nbsp;
                         {fingerprint && (
                           <StyledInlineTypography
