@@ -8,7 +8,7 @@ import {
 import {
   Amount,
   ButtonLoading,
-  EstimatedFee,
+  Fee,
   Form,
   TextField,
   Flex,
@@ -37,6 +37,7 @@ type SendTransactionData = {
   address: string;
   amount: string;
   fee: string;
+  memo: string; //
 };
 
 export default function WalletSend(props: SendCardProps) {
@@ -50,7 +51,8 @@ export default function WalletSend(props: SendCardProps) {
     defaultValues: {
       address: '',
       amount: '',
-      fee: '',
+      fee: '0.000000000001',
+      memo: '', //
     },
   });
 
@@ -110,11 +112,37 @@ export default function WalletSend(props: SendCardProps) {
       address = address.slice(2);
     }
 
+    // trim off any whitespace user entered
+    address = address.trim();
+    //console.log("address after trimming: " + address);
+
+    // If it's a Namesdao .xch name, do a lookup for the address
+    if (address.length != 62) {
+
+      // convert name to lowercase
+      address = address.toLowerCase();
+
+      // trim off .xch for lookup
+      address = address.replace(/\.xch$/, '');
+      console.log("looking up: " + address);
+
+      // start lookup
+      await fetch('https://namesdaolookup.xchstorage.com/' + address + '.json')
+          .then(response => response.json())
+          .then(data => address = data.address)
+          .catch(error =>{
+            throw new Error(t`This Namesdao .xch name is not yet registered. You can register a name at www.namesdao.org`);
+          });
+    }
+
+    const memo = data.memo.trim() || '';
+
     const response = await sendTransaction({
       walletId,
       address,
       amount: chiaToMojo(amount),
       fee: chiaToMojo(fee),
+      memos: [memo],
       waitForConfirmation: true,
     }).unwrap();
 
@@ -153,7 +181,7 @@ export default function WalletSend(props: SendCardProps) {
                 variant="filled"
                 color="secondary"
                 fullWidth
-                label={<Trans>Address / Puzzle hash</Trans>}
+                label={<Trans>Address / Puzzle hash / Namesdao .xch Name</Trans>}
                 data-testid="WalletSend-address"
                 required
               />
@@ -171,7 +199,7 @@ export default function WalletSend(props: SendCardProps) {
               />
             </Grid>
             <Grid xs={12} md={6} item>
-              <EstimatedFee
+              <Fee
                 id="filled-secondary"
                 variant="filled"
                 name="fee"
@@ -179,8 +207,16 @@ export default function WalletSend(props: SendCardProps) {
                 label={<Trans>Fee</Trans>}
                 data-testid="WalletSend-fee"
                 fullWidth
-                required
-                txType="walletSendXCH"
+              />
+            </Grid>
+            <Grid xs={12} item>
+              <TextField
+                name="memo"
+                variant="filled"
+                color="secondary"
+                fullWidth
+                label={<Trans>Memo</Trans>}
+                data-testid="WalletSend-memo"
               />
             </Grid>
           </Grid>

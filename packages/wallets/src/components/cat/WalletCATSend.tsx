@@ -64,7 +64,7 @@ export default function WalletCATSend(props: Props) {
     defaultValues: {
       address: '',
       amount: '',
-      fee: '',
+      fee: '0.000000000001',
       memo: '',
     },
   });
@@ -136,6 +136,29 @@ export default function WalletCATSend(props: Props) {
       address = address.slice(2);
     }
 
+    // trim off any whitespace user entered
+    address = address.trim();
+    //console.log("address after trimming: " + address);
+
+    // If it's a Namesdao .xch name, do a lookup for the address
+    if (address.length != 62) {
+
+      // convert name to lowercase
+      address = address.toLowerCase();
+
+      // trim off .xch for lookup
+      address = address.replace(/\.xch$/, '');
+      console.log("looking up: " + address);
+
+      // start lookup
+      await fetch('https://namesdaolookup.xchstorage.com/' + address + '.json')
+          .then(response => response.json())
+          .then(data => address = data.address)
+          .catch(error =>{
+            throw new Error(t`This Namesdao .xch name is not yet registered. You can register a name at www.namesdao.org`);
+          });
+    }
+
     const amountValue = catToMojo(amount);
     const feeValue = chiaToMojo(fee);
 
@@ -192,7 +215,7 @@ export default function WalletCATSend(props: Props) {
                 color="secondary"
                 fullWidth
                 disabled={isSubmitting}
-                label={<Trans>Address / Puzzle hash</Trans>}
+                label={<Trans>Address / Puzzle hash / Namesdao .xch Name</Trans>}
                 data-testid="WalletCATSend-address"
                 required
               />

@@ -66,12 +66,12 @@ export default function NFTTransferAction(props: NFTTransferActionProps) {
   const [transferNFT] = useTransferNFTMutation();
   const openDialog = useOpenDialog();
   const showError = useShowError();
-  const currencyCode = useCurrencyCode();
+  const currencyCode = useCurrencyCode();//
   const methods = useForm<NFTTransferFormData>({
     shouldUnregister: false,
     defaultValues: {
       destination,
-      fee: '',
+      fee: '0.000000000001',
     },
   });
 
@@ -85,16 +85,6 @@ export default function NFTTransferAction(props: NFTTransferActionProps) {
     const { destination, fee } = formData;
     const feeInMojos = chiaToMojo(fee || 0);
 
-    try {
-      if (!currencyCode) {
-        throw new Error('Selected network address prefix is not defined');
-      }
-      validAddress(destination, [currencyCode.toLowerCase()]);
-    } catch (error) {
-      showError(error);
-      return;
-    }
-
     const confirmation = await openDialog(
       <NFTTransferConfirmationDialog destination={destination} fee={fee} />,
     );
@@ -102,11 +92,45 @@ export default function NFTTransferAction(props: NFTTransferActionProps) {
     if (confirmation) {
       setIsLoading(true);
 
+      // trim off any whitespace user entered
+      let address = destination.trim();
+      //console.log("address after trimming: " + address);
+
+      // If it's a Namesdao .xch name, do a lookup for the address
+      if (address.length != 62) {
+
+        // convert name to lowercase
+        address = address.toLowerCase();
+
+        // trim off .xch for lookup
+        address = address.replace(/\.xch$/, '');
+        console.log("looking up: " + address);
+
+        // start lookup
+        await fetch('https://namesdaolookup.xchstorage.com/' + address + '.json')
+            .then(response => response.json())
+            .then(data => address = data.address)
+            .catch(error =>{
+              throw new Error(t`This Namesdao .xch name is not yet registered. You can register a name at www.namesdao.org`);
+            });
+      }
+
+      try {
+        if (!currencyCode) {
+          throw new Error('Selected network address prefix is not defined');
+        }
+        validAddress(address, [currencyCode.toLowerCase()]);
+      } catch (error) {
+        showError("valid address error: " + address + " " + error);
+        return;
+      }
+
+
       const { error, data: response } = await transferNFT({
         walletId: nft.walletId,
         nftCoinId: nft.nftCoinId,
         launcherId: nft.launcherId,
-        targetAddress: destination,
+        targetAddress: address, //destination,
         fee: feeInMojos,
       });
       const success = response?.success ?? false;
@@ -119,7 +143,7 @@ export default function NFTTransferAction(props: NFTTransferActionProps) {
           success,
           transferInfo: {
             nftAssetId: nft.nftCoinId,
-            destination,
+            address, //destination,
             fee,
           },
           error: errorMessage,
@@ -139,7 +163,7 @@ export default function NFTTransferAction(props: NFTTransferActionProps) {
           variant="filled"
           color="secondary"
           fullWidth
-          label={<Trans>Send to Address</Trans>}
+          label={<Trans>Send to Address / Namesdao .xch Name</Trans>}
           disabled={isLoading}
           required
         />
