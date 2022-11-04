@@ -44,7 +44,7 @@ export default function NFTSummary(props: NFTSummaryProps) {
   const { data: nft, isLoading: isLoadingNFT } = useGetNFTInfoQuery({
     coinId: launcherId,
   });
-  const { metadata, isLoading: isLoadingMetadata } = useNFTMetadata(nft);
+  const { metadata, isLoading: isLoadingMetadata } = useNFTMetadata([nft]);
 
   const [properties, rankings] = useMemo(() => {
     if (!nft) {
@@ -126,7 +126,7 @@ export default function NFTSummary(props: NFTSummaryProps) {
     return (
       <Flex flexDirection="row" alignItems="center" gap={1} {...rest}>
         <Typography variant="body2">{truncatedNftId}</Typography>
-        <TooltipIcon interactive>
+        <TooltipIcon>
           <Flex flexDirection="column" gap={1}>
             <Flex flexDirection="column" gap={0}>
               <Flex>
@@ -174,7 +174,7 @@ export default function NFTSummary(props: NFTSummaryProps) {
               minWidth="80px"
               height="80px"
             >
-              <NFTPreview nft={nft} height={80} />
+              <NFTPreview nft={nft} height={80} disableThumbnail />
             </Box>
             <Flex
               flexDirection="column"

@@ -9,8 +9,6 @@ import {
   ButtonLoading,
   Card,
   CardHero,
-  DropdownActions,
-  type DropdownActionsChildProps,
   Fee,
   Flex,
   Form,
@@ -26,6 +24,7 @@ import {
   useShowSaveDialog,
   Tooltip,
   LayoutDashboardSub,
+  MenuItem,
 } from '@chia/core';
 import { OfferSummaryRecord, OfferTradeRecord } from '@chia/api';
 import {
@@ -40,7 +39,6 @@ import {
   FormControlLabel,
   Grid,
   ListItemIcon,
-  MenuItem,
   Typography,
 } from '@mui/material';
 import {
@@ -50,7 +48,6 @@ import {
   Reply as Share,
   Visibility,
 } from '@mui/icons-material';
-import { Offers } from '@chia/icons';
 import {
   useCancelOfferMutation,
   useGetOfferDataMutation,
@@ -61,7 +58,6 @@ import {
   displayStringForOfferState,
   formatAmountForWalletType,
   offerAssetTypeForAssetId,
-  offerContainsAssetOfType,
 } from './utils';
 import { launcherIdToNFTId } from '../../util/nfts';
 import useAssetIdName from '../../hooks/useAssetIdName';
@@ -70,12 +66,14 @@ import useWalletOffers from '../../hooks/useWalletOffers';
 import { CreateOfferEditor } from './OfferEditor';
 import { CreateNFTOfferEditor } from './NFTOfferEditor';
 import { OfferImport } from './OfferImport';
-import { OfferViewer } from './OfferViewer';
 import NFTOfferViewer from './NFTOfferViewer';
 import OfferAsset from './OfferAsset';
 import OfferDataDialog from './OfferDataDialog';
 import OfferShareDialog from './OfferShareDialog';
 import OfferState from './OfferState';
+import CreateOfferBuilder from '../offers2/CreateOfferBuilder';
+import OfferBuilderImport from '../offers2/OfferBuilderImport';
+import OfferBuilderViewer from '../offers2/OfferBuilderViewer';
 
 type ConfirmOfferCancellationProps = {
   canCancelWithTransaction: boolean;
@@ -299,13 +297,12 @@ function OfferList(props: OfferListProps) {
   }
 
   function handleRowClick(event: any, row: OfferTradeRecord) {
-    const navigationPath = offerContainsAssetOfType(row.summary, 'singleton')
-      ? '/dashboard/offers/view-nft'
-      : '/dashboard/offers/view';
-
-    navigate(navigationPath, {
+    navigate('/dashboard/offers/view', {
       state: {
-        tradeRecord: row,
+        referrerPath: '/dashboard/offers',
+        offerSummary: row.summary,
+        isMyOffer: row.isMyOffer,
+        state: row.status,
       },
     });
   }
@@ -436,70 +433,54 @@ function OfferList(props: OfferListProps) {
               </Flex>
               <Flex style={{ width: '32px' }}>
                 <More>
-                  {({ onClose }: { onClose: () => void }) => (
-                    <Box>
-                      <MenuItem
-                        onClick={() => {
-                          onClose();
-                          handleRowClick(undefined, row);
-                        }}
-                      >
-                        <ListItemIcon>
-                          <Info fontSize="small" />
-                        </ListItemIcon>
-                        <Typography variant="inherit" noWrap>
-                          <Trans>Show Details</Trans>
-                        </Typography>
-                      </MenuItem>
-                      {canDisplayData && (
-                        <MenuItem
-                          onClick={() => {
-                            onClose();
-                            handleShowOfferData(row._offerData);
-                          }}
-                        >
-                          <ListItemIcon>
-                            <Visibility fontSize="small" />
-                          </ListItemIcon>
-                          <Typography variant="inherit" noWrap>
-                            <Trans>Display Offer Data</Trans>
-                          </Typography>
-                        </MenuItem>
-                      )}
-                      {canExport && (
-                        <MenuItem
-                          onClick={() => {
-                            onClose();
-                            saveOffer(tradeId);
-                          }}
-                        >
-                          <ListItemIcon>
-                            <Download fontSize="small" />
-                          </ListItemIcon>
-                          <Typography variant="inherit" noWrap>
-                            <Trans>Save Offer File</Trans>
-                          </Typography>
-                        </MenuItem>
-                      )}
-                      {canCancel && (
-                        <MenuItem
-                          onClick={() => {
-                            onClose();
-                            handleCancelOffer(
-                              tradeId,
-                              canCancelWithTransaction,
-                            );
-                          }}
-                        >
-                          <ListItemIcon>
-                            <Cancel fontSize="small" />
-                          </ListItemIcon>
-                          <Typography variant="inherit" noWrap>
-                            <Trans>Cancel Offer</Trans>
-                          </Typography>
-                        </MenuItem>
-                      )}
-                    </Box>
+                  <MenuItem
+                    onClick={() => handleRowClick(undefined, row)}
+                    close
+                  >
+                    <ListItemIcon>
+                      <Info fontSize="small" />
+                    </ListItemIcon>
+                    <Typography variant="inherit" noWrap>
+                      <Trans>Show Details</Trans>
+                    </Typography>
+                  </MenuItem>
+                  {canDisplayData && (
+                    <MenuItem
+                      onClick={() => handleShowOfferData(row._offerData)}
+                      close
+                    >
+                      <ListItemIcon>
+                        <Visibility fontSize="small" />
+                      </ListItemIcon>
+                      <Typography variant="inherit" noWrap>
+                        <Trans>Display Offer Data</Trans>
+                      </Typography>
+                    </MenuItem>
+                  )}
+                  {canExport && (
+                    <MenuItem onClick={() => saveOffer(tradeId)} close>
+                      <ListItemIcon>
+                        <Download fontSize="small" />
+                      </ListItemIcon>
+                      <Typography variant="inherit" noWrap>
+                        <Trans>Save Offer File</Trans>
+                      </Typography>
+                    </MenuItem>
+                  )}
+                  {canCancel && (
+                    <MenuItem
+                      onClick={() =>
+                        handleCancelOffer(tradeId, canCancelWithTransaction)
+                      }
+                      close
+                    >
+                      <ListItemIcon>
+                        <Cancel fontSize="small" />
+                      </ListItemIcon>
+                      <Typography variant="inherit" noWrap>
+                        <Trans>Cancel Offer</Trans>
+                      </Typography>
+                    </MenuItem>
                   )}
                 </More>
               </Flex>
@@ -546,81 +527,71 @@ function OfferList(props: OfferListProps) {
 export function OfferManager() {
   const navigate = useNavigate();
 
-  function handleCreateTokenOffer() {
-    navigate('/dashboard/offers/create', {
+  function handleOfferBuilder() {
+    navigate('/dashboard/offers/builder', {
       state: { referrerPath: '/dashboard/offers' },
     });
-  }
-
-  function handleCreateNFTOffer() {
-    navigate('/dashboard/offers/create-with-nft', {
-      state: { referrerPath: '/dashboard/offers' },
-    });
-  }
-
-  function handleImportOffer() {
-    navigate('/dashboard/offers/import');
   }
 
   return (
-    <Flex flexDirection="column" gap={4}>
-      <Flex gap={2} flexDirection="column">
-        <Typography variant="h5">
-          <Trans>Manage Offers</Trans>
-        </Typography>
-        <Grid container>
-          <Grid xs={12} md={6} lg={5} item>
-            <CardHero>
-              <Offers color="primary" fontSize="extraLarge" />
-              <Typography variant="body1">
-                <Trans>
-                  Create an offer to exchange assets including XCH, tokens, and
-                  NFTs. View an offer to inspect and accept an offer made by
-                  another party.
-                </Trans>
-              </Typography>
-              <Grid container spacing={1}>
-                <Grid xs={6} item>
-                  <DropdownActions label={<Trans>Create an Offer</Trans>}>
-                    {({ onClose }: DropdownActionsChildProps) => (
-                      <>
-                        <MenuItem
-                          onClick={() => {
-                            onClose();
-                            handleCreateTokenOffer();
-                          }}
-                        >
-                          <Typography variant="inherit" noWrap>
-                            <Trans>Token Offer</Trans>
-                          </Typography>
-                        </MenuItem>
-                        <MenuItem
-                          onClick={() => {
-                            onClose();
-                            handleCreateNFTOffer();
-                          }}
-                        >
-                          <Typography variant="inherit" noWrap>
-                            <Trans>NFT Offer</Trans>
-                          </Typography>
-                        </MenuItem>
-                      </>
-                    )}
-                  </DropdownActions>
-                </Grid>
-                <Grid xs={6} item>
-                  <Button
-                    onClick={handleImportOffer}
-                    variant="outlined"
-                    fullWidth
-                  >
-                    <Trans>View an Offer</Trans>
-                  </Button>
-                </Grid>
-              </Grid>
-            </CardHero>
+    <Flex flexDirection="column" gap={4} alignItems="stretch">
+      <Flex gap={4} flexDirection="column">
+        <Flex flexDirection="column" gap={1}>
+          <Typography variant="h5">
+            <Trans>Offer Management</Trans>
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            <Trans>
+              Offers are a way to trade assets in a genuinely peer-to-peer way
+              to eliminate counterparty risk.
+            </Trans>
+          </Typography>
+        </Flex>
+        <Box>
+          <Grid spacing={4} container>
+            <Grid xs={12} md={6} item>
+              <Flex flexDirection="column" gap={2} height="100%">
+                <Typography variant="h6">
+                  <Trans>Create Offer</Trans>
+                </Typography>
+                <CardHero variant="outlined" fullHeight>
+                  <Flex flexDirection="column" gap={4} height="100%">
+                    <Flex flexDirection="column" gap={2} flexGrow={1}>
+                      <Typography variant="h6">
+                        <Trans>Offer Builder</Trans>
+                      </Typography>
+                      <Typography variant="body1" color="textSecondary">
+                        <Trans>
+                          Create a file that you can use to trade XCH, Chia
+                          Asset Tokens, or NFTs with no counter-party risk.
+                        </Trans>
+                      </Typography>
+                    </Flex>
+                    <Flex justifyContent="flex-end">
+                      <Button
+                        onClick={handleOfferBuilder}
+                        variant="contained"
+                        color="primary"
+                      >
+                        <Typography variant="inherit" noWrap>
+                          <Trans>Create an Offer</Trans>
+                        </Typography>
+                      </Button>
+                    </Flex>
+                  </Flex>
+                </CardHero>
+              </Flex>
+            </Grid>
+            <Grid xs={12} md={6} item>
+              <Flex flexDirection="column" gap={2} height="100%">
+                <Typography variant="h6">
+                  <Trans>View Offer</Trans>
+                </Typography>
+                <OfferBuilderImport />
+              </Flex>
+            </Grid>
           </Grid>
-        </Grid>
+        </Box>
       </Flex>
       <OfferList
         title={<Trans>Offers you created</Trans>}
@@ -661,6 +632,18 @@ export function CreateOffer() {
     <LayoutDashboardSub>
       <Routes>
         <Route
+          path="builder"
+          element={
+            <CreateOfferBuilder
+              walletType={locationState?.walletType}
+              assetId={locationState?.assetId}
+              nftId={locationState?.nftId}
+              referrerPath={locationState?.referrerPath}
+              onOfferCreated={handleOfferCreated}
+            />
+          }
+        />
+        <Route
           path="create"
           element={
             <CreateOfferEditor
@@ -699,12 +682,14 @@ export function CreateOffer() {
         <Route
           path="view"
           element={
-            <OfferViewer
-              tradeRecord={locationState?.tradeRecord}
+            <OfferBuilderViewer
+              state={locationState?.state}
+              isMyOffer={locationState?.isMyOffer}
               offerData={locationState?.offerData}
               offerSummary={locationState?.offerSummary}
               offerFilePath={locationState?.offerFilePath}
               imported={locationState?.imported}
+              referrerPath={locationState?.referrerPath}
             />
           }
         />

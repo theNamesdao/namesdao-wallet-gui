@@ -4,15 +4,16 @@ import {
   LayoutDashboardSub,
   Loading,
   DropdownActions,
+  MenuItem,
   /*useTrans,*/ usePersistState,
 } from '@chia/core';
 import { Trans } from '@lingui/macro';
-import { Switch, MenuItem, FormGroup, FormControlLabel } from '@mui/material';
+import { Switch, FormGroup, FormControlLabel } from '@mui/material';
 import { FilterList as FilterListIcon } from '@mui/icons-material';
 // import { defineMessage } from '@lingui/macro';
 import { WalletReceiveAddressField } from '@chia/wallets';
 import type { NFTInfo, Wallet } from '@chia/api';
-import { useGetNFTWallets } from '@chia/api-react';
+import { useGetNFTWallets /*useGetNFTsByNFTIDsQuery*/ } from '@chia/api-react';
 import { Box, Grid } from '@mui/material';
 // import NFTGallerySidebar from './NFTGallerySidebar';
 import NFTCardLazy from '../NFTCardLazy';
@@ -22,8 +23,13 @@ import type NFTSelection from '../../../types/NFTSelection';
 import useFetchNFTs from '../../../hooks/useFetchNFTs';
 import useHiddenNFTs from '../../../hooks/useHiddenNFTs';
 import useHideObjectionableContent from '../../../hooks/useHideObjectionableContent';
+import useNachoNFTs from '../../../hooks/useNachoNFTs';
 import NFTProfileDropdown from '../NFTProfileDropdown';
 import NFTGalleryHero from './NFTGalleryHero';
+import { useLocalStorage } from '@chia/api-react';
+import useNFTMetadata from '../../../hooks/useNFTMetadata';
+
+export const defaultCacheSizeLimit = 1024; /* MB */
 
 function searchableNFTContent(nft: NFTInfo) {
   const items = [nft.$nftId, nft.dataUris?.join(' ') ?? '', nft.launcherId];
@@ -37,6 +43,27 @@ export default function NFTGallery() {
   const { nfts, isLoading: isLoadingNFTs } = useFetchNFTs(
     nftWallets.map((wallet: Wallet) => wallet.id),
   );
+  const noMetadataNFTs = nfts
+    .filter((nft) => {
+      return (
+        !nft?.metadataUris ||
+        (Array.isArray(nft.metadataUris) && nft.metadataUris.length === 0)
+      );
+    })
+    .map((nft) => nft.$nftId);
+
+  const { allowedNFTsWithMetadata } = useNFTMetadata(
+    nfts.filter((nft: NFTInfo) => {
+      return (
+        !nft?.metadataUris ||
+        (Array.isArray(nft?.metadataUris) && nft?.metadataUris.length > 0)
+      );
+    }),
+    true,
+  ); /* NFTs with metadata and no sensitive_content */
+
+  const allAllowedNFTs = noMetadataNFTs.concat(allowedNFTsWithMetadata);
+
   const [isNFTHidden] = useHiddenNFTs();
   const isLoading = isLoadingWallets || isLoadingNFTs;
   const [search /*, setSearch*/] = useState<string>('');
@@ -48,12 +75,30 @@ export default function NFTGallery() {
     'nft-profile-dropdown',
   );
 
+  const { data: nachoNFTs } = useNachoNFTs();
+
   // const t = useTrans();
   const [selection, setSelection] = useState<NFTSelection>({
     items: [],
   });
 
+  const [limitCacheSize] = useLocalStorage(
+    `limit-cache-size`,
+    defaultCacheSizeLimit,
+  );
+
+  React.useEffect(() => {
+    if (limitCacheSize !== defaultCacheSizeLimit) {
+      const ipcRenderer = (window as any).ipcRenderer;
+      ipcRenderer?.invoke('setLimitCacheSize', limitCacheSize);
+    }
+  }, [limitCacheSize]);
+
   const filteredData = useMemo(() => {
+    if (nachoNFTs && walletId === -1) {
+      return nachoNFTs;
+    }
+
     if (!nfts) {
       return nfts;
     }
@@ -64,6 +109,13 @@ export default function NFTGallery() {
       }
 
       if (!showHidden && isNFTHidden(nft)) {
+        return false;
+      }
+
+      if (
+        hideObjectionableContent &&
+        allAllowedNFTs.indexOf(nft.$nftId) === -1
+      ) {
         return false;
       }
 
@@ -81,6 +133,8 @@ export default function NFTGallery() {
     isNFTHidden,
     showHidden,
     hideObjectionableContent,
+    nachoNFTs,
+    allAllowedNFTs,
   ]);
 
   function handleSelect(nft: NFTInfo, selected: boolean) {
@@ -140,18 +194,14 @@ export default function NFTGallery() {
                   color="secondary"
                   size="large"
                 >
-                  {() => (
-                    <>
-                      <MenuItem onClick={handleToggleShowHidden}>
-                        <FormGroup>
-                          <FormControlLabel
-                            control={<Switch checked={showHidden} />}
-                            label={<Trans>Show Hidden</Trans>}
-                          />
-                        </FormGroup>
-                      </MenuItem>
-                    </>
-                  )}
+                  <MenuItem onClick={handleToggleShowHidden}>
+                    <FormGroup>
+                      <FormControlLabel
+                        control={<Switch checked={showHidden} />}
+                        label={<Trans>Show Hidden</Trans>}
+                      />
+                    </FormGroup>
+                  </MenuItem>
                 </DropdownActions>
               </Flex>
             </Box>

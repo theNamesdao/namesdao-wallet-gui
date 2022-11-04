@@ -8,6 +8,7 @@ import {
   IncomingMessage,
   Menu,
   nativeImage,
+  protocol,
 } from 'electron';
 import { initialize } from '@electron/remote/main';
 import path from 'path';
@@ -17,6 +18,9 @@ import url from 'url';
 // import installExtension, { REDUX_DEVTOOLS, REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import ReactDOMServer from 'react-dom/server';
 import { ServerStyleSheet, StyleSheetManager } from 'styled-components';
+import fs from 'fs';
+import crypto from 'crypto';
+
 // handle setupevents as quickly as possible
 import '../config/env';
 import handleSquirrelEvent from './handleSquirrelEvent';
@@ -29,14 +33,28 @@ import About from '../components/about/About';
 import packageJson from '../../package.json';
 import AppIcon from '../assets/img/chia64x64.png';
 import windowStateKeeper from 'electron-window-state';
+import { parseExtensionFromUrl } from '../util/utils';
+import computeHash from '../util/computeHash';
+import axios from 'axios';
 
+const isPlaywrightTesting = process.env.PLAYWRIGHT_TESTS === 'true';
 const NET = 'mainnet';
 
 app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-http-cache');
 
 initialize();
 
 const appIcon = nativeImage.createFromPath(path.join(__dirname, AppIcon));
+let thumbCacheFolder = path.join(app.getPath('cache'), app.getName());
+
+if (!fs.existsSync(thumbCacheFolder)) {
+  fs.mkdirSync(thumbCacheFolder);
+}
+
+let cacheLimitSize: number = 1024;
+
+const validatingProgress = {};
 
 // Set the userData directory to its location within CHIA_ROOT/gui
 setUserDataDir();
@@ -88,6 +106,20 @@ function openAbout() {
   openedWindows.add(aboutWindow);
 
   // aboutWindow.webContents.openDevTools({ mode: 'detach' });
+}
+
+export function getChecksum(path: string) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const input = fs.createReadStream(path);
+    input.on('error', reject);
+    input.on('data', (chunk) => {
+      hash.update(chunk);
+    });
+    input.on('close', () => {
+      resolve(hash.digest('hex'));
+    });
+  });
 }
 
 if (!handleSquirrelEvent()) {
@@ -197,6 +229,57 @@ if (!handleSquirrelEvent()) {
         },
       );
 
+      function getRemoteFileSize(url: string): Promise<number> {
+        return new Promise((resolve, reject) => {
+          axios({
+            method: 'get',
+            url: url,
+          })
+            .then((response) => {
+              resolve(Number(response.headers['content-length']));
+            })
+            .catch((e) => {
+              reject(e.message);
+            });
+        });
+      }
+
+      const allRequests: any = {};
+
+      ipcMain.handle('abortFetchingBinary', (_event, uri: string) => {
+        if (allRequests[uri]) {
+          allRequests[uri].abort();
+          delete allRequests[uri];
+        }
+      });
+
+      ipcMain.handle('removeCachedFile', (_event, file: string) => {
+        const filePath = path.join(thumbCacheFolder, file);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      });
+
+      function shouldCacheFile(filePath: string) {
+        const stats = fs.statSync(filePath);
+        const allowWriteCache =
+          getCacheSize() + stats.size < cacheLimitSize * 1024 * 1024;
+        return allowWriteCache;
+      }
+
+      ipcMain.handle('getSvgContent', (_event, file) => {
+        if (file) {
+          const fileOnDisk = path.join(thumbCacheFolder, file);
+          if (fs.existsSync(fileOnDisk)) {
+            return fs.readFileSync(fileOnDisk, { encoding: 'utf8' });
+          } else {
+            return null;
+          }
+        } else {
+          console.error('Error getting svg file...', file);
+        }
+      });
+
       ipcMain.handle(
         'fetchBinaryContent',
         async (
@@ -206,11 +289,27 @@ if (!handleSquirrelEvent()) {
           requestData?: any,
         ) => {
           const { maxSize = Infinity, ...rest } = requestOptions;
-          const request = net.request(rest);
+
+          let wasCached = false;
+
+          if (allRequests[rest.uri]) {
+            /* request already exists */
+            return;
+          }
+
+          allRequests[rest.url] = net.request(rest);
+
+          const nftIdUrl = `${rest.nftId}_${rest.url}`;
+          const fileOnDisk = path.join(
+            thumbCacheFolder,
+            computeHash(nftIdUrl, { encoding: 'utf-8' }),
+          );
+
+          const fileStream = fs.createWriteStream(fileOnDisk);
 
           Object.entries(requestHeaders).forEach(
             ([header, value]: [string, any]) => {
-              request.setHeader(header, value);
+              allRequests[rest.uri].setHeader(header, value);
             },
           );
 
@@ -219,71 +318,142 @@ if (!handleSquirrelEvent()) {
           let statusMessage: string | undefined;
           let contentType: string | undefined;
           let encoding = 'binary';
-          let data: string | undefined;
+          let dataObject: { isValid?: boolean; content: string } = {
+            content: '',
+          };
 
           const buffers: Buffer[] = [];
           let totalLength = 0;
 
           try {
-            data = await new Promise((resolve, reject) => {
-              request.on('response', (response: IncomingMessage) => {
-                statusCode = response.statusCode;
-                statusMessage = response.statusMessage;
+            let fileSize: number;
+            fileSize = await getRemoteFileSize(rest.url);
+            dataObject = await new Promise((resolve, reject) => {
+              /* GET FILE SIZE */
+              allRequests[rest.url].on(
+                'response',
+                (response: IncomingMessage) => {
+                  statusCode = response.statusCode;
+                  statusMessage = response.statusMessage;
 
-                const rawContentType = response.headers['content-type'];
-                if (rawContentType) {
-                  if (Array.isArray(rawContentType)) {
-                    contentType = rawContentType[0];
-                  } else {
-                    contentType = rawContentType;
-                  }
+                  const rawContentType = response.headers['content-type'];
+                  if (rawContentType) {
+                    if (Array.isArray(rawContentType)) {
+                      contentType = rawContentType[0];
+                    } else {
+                      contentType = rawContentType;
+                    }
 
-                  if (contentType) {
-                    // extract charset from contentType
-                    const charsetMatch = contentType.match(/charset=([^;]+)/);
-                    if (charsetMatch) {
-                      encoding = charsetMatch[1];
+                    if (contentType) {
+                      // extract charset from contentType
+                      const charsetMatch = contentType.match(/charset=([^;]+)/);
+                      if (charsetMatch) {
+                        encoding = charsetMatch[1];
+                      }
                     }
                   }
-                }
 
-                response.on('data', (chunk) => {
-                  buffers.push(chunk);
+                  response.on('data', (chunk) => {
+                    buffers.push(chunk);
 
-                  totalLength += chunk.byteLength;
+                    fileStream.write(chunk);
 
-                  if (totalLength > maxSize) {
-                    reject(new Error('Response too large'));
-                    request.abort();
-                  }
-                });
+                    totalLength += chunk.byteLength;
 
-                response.on('end', () => {
-                  resolve(
-                    Buffer.concat(buffers).toString(encoding as BufferEncoding),
-                  );
-                });
+                    if (fileSize > 0) {
+                      mainWindow?.webContents.send(
+                        'fetchBinaryContentProgress',
+                        {
+                          nftIdUrl,
+                          progress: totalLength / fileSize,
+                        },
+                      );
+                    }
+                    if (totalLength > maxSize || fileSize > maxSize) {
+                      if (allRequests[rest.url]) {
+                        allRequests[rest.url].abort();
+                        if (fs.existsSync(fileOnDisk)) {
+                          fs.unlinkSync(fileOnDisk);
+                        }
+                      }
+                      reject(new Error('Response too large'));
+                    }
+                  });
 
-                response.on('error', (e: string) => {
-                  reject(new Error(e));
-                });
-              });
+                  response.on('end', () => {
+                    let content;
+                    // special case for iso-8859-1, which is mapped to 'latin1' in node
+                    if (encoding.toLowerCase() === 'iso-8859-1') {
+                      encoding = 'latin1';
+                    }
+                    try {
+                      content = Buffer.concat(buffers).toString(
+                        encoding as BufferEncoding,
+                      );
+                    } catch (e: any) {
+                      console.error(
+                        `Failed to convert data to string using encoding ${encoding}: ${e.message}`,
+                      );
+                    }
+                    fileStream.end();
+                    getChecksum(fileOnDisk).then((checksum) => {
+                      const isValid =
+                        (checksum as string).replace(/^0x/, '') ===
+                        rest.dataHash.replace(/^0x/, '');
+                      if (rest.forceCache) {
+                        /* should we cache it or delete it? */
+                        if (shouldCacheFile(fileOnDisk)) {
+                          wasCached = true;
+                        } else {
+                          if (fs.existsSync(fileOnDisk)) {
+                            fs.unlinkSync(fileOnDisk);
+                          }
+                        }
+                        mainWindow?.webContents.send('fetchBinaryContentDone', {
+                          nftIdUrl,
+                          valid: isValid,
+                        });
+                        const extension = parseExtensionFromUrl(rest.url);
+                        resolve({
+                          isValid,
+                          content: extension === 'svg' ? content : '',
+                        });
+                      } else {
+                        resolve({ isValid, content });
+                      }
+                    });
+                    delete allRequests[rest.url];
+                  });
 
-              request.on('error', (error: any) => {
+                  response.on('error', (e: string) => {
+                    fileStream.end();
+                    reject(new Error(e));
+                  });
+                },
+              );
+
+              allRequests[rest.url].on('error', (error: any) => {
                 reject(error);
               });
 
               if (requestData) {
-                request.write(requestData);
+                allRequests[rest.url].write(requestData);
               }
 
-              request.end();
+              allRequests[rest.url].end();
             });
           } catch (e: any) {
             error = e;
           }
 
-          return { error, statusCode, statusMessage, encoding, data };
+          return {
+            error,
+            statusCode,
+            statusMessage,
+            encoding,
+            dataObject,
+            wasCached,
+          };
         },
       );
 
@@ -300,21 +470,115 @@ if (!handleSquirrelEvent()) {
       });
 
       ipcMain.handle('download', async (_event, options) => {
-        if(mainWindow){
+        if (mainWindow) {
           return mainWindow.webContents.downloadURL(options.url);
-        }
-        else{
-          console.error("mainWindow was not initialized");
+        } else {
+          console.error('mainWindow was not initialized');
         }
       });
 
-      ipcMain.handle('processLaunchTasks', async(_event) => {
+      ipcMain.handle('processLaunchTasks', async (_event) => {
         const tasks = [...mainWindowLaunchTasks];
 
         mainWindowLaunchTasks = [];
 
         tasks.forEach((task) => task(mainWindow!));
       });
+
+      /* ========================== CACHE FOLDER ================================ */
+      function getCacheSize() {
+        let folderSize: number = 0;
+        const files = fs.readdirSync(thumbCacheFolder);
+
+        files
+          .filter((file) => {
+            /* skip files that start with a dot */
+            return !file.match(/^\./);
+          })
+          .forEach((file) => {
+            const stats = fs.statSync(path.join(thumbCacheFolder, file));
+            folderSize += stats.size;
+          });
+        return folderSize;
+      }
+      ipcMain.handle('getDefaultCacheFolder', (_event) => {
+        return thumbCacheFolder;
+      });
+
+      ipcMain.handle('setCacheFolder', (_event, newFolder) => {
+        thumbCacheFolder = newFolder;
+      });
+
+      ipcMain.handle('selectCacheFolder', async (_event) => {
+        return await dialog.showOpenDialog({
+          properties: ['openDirectory'],
+          defaultPath: thumbCacheFolder,
+        });
+      });
+
+      ipcMain.handle('changeCacheFolderFromTo', async (_event, [from, to]) => {
+        const fromFolder = from || thumbCacheFolder;
+        if (fs.existsSync(fromFolder)) {
+          const fileStats = fs.statSync(fromFolder);
+          if (fileStats.isDirectory()) {
+            const files = fs.readdirSync(fromFolder);
+            files.forEach((file) => {
+              if (fs.lstatSync(path.join(fromFolder, file)).isFile()) {
+                fs.renameSync(path.join(fromFolder, file), path.join(to, file));
+              }
+            });
+          }
+        }
+
+        thumbCacheFolder = to;
+      });
+
+      ipcMain.handle('getCacheSize', async (_event) => {
+        return getCacheSize();
+      });
+
+      ipcMain.handle('isNewFolderEmtpy', (_event, selectedFolder) => {
+        return fs.readdirSync(selectedFolder).filter((file) => {
+          /* skip files that start with a dot */
+          return !file.match(/^\./);
+        }).length;
+      });
+
+      ipcMain.handle(
+        'adjustCacheLimitSize',
+        async (_event, { newSize, cacheInstances }) => {
+          if (newSize) {
+            cacheLimitSize = newSize;
+          }
+          let overSize = getCacheSize() - newSize * 1024 * 1024; /* MiB! */
+
+          if (overSize > 0) {
+            const removedEntries: any[] = [];
+            for (let cnt = 0; cnt < cacheInstances.length; cnt++) {
+              const fileString =
+                cacheInstances[cnt].video ||
+                cacheInstances[cnt].image ||
+                cacheInstances[cnt].binary;
+              if (fileString) {
+                const filePath = path.join(thumbCacheFolder, fileString);
+                if (fs.existsSync(filePath)) {
+                  const fileStats = fs.statSync(filePath);
+                  fs.unlinkSync(filePath);
+                  overSize = overSize - fileStats.size;
+                  removedEntries.push(cacheInstances[cnt]);
+                }
+              }
+              if (overSize < 0) break;
+            }
+            mainWindow?.webContents.send('removedFromLocalStorage', {
+              removedEntries,
+              occupied: getCacheSize(),
+            });
+          }
+        },
+      );
+
+      /* ======================================================================== */
 
       decidedToClose = false;
       const mainWindowState = windowStateKeeper({
@@ -329,12 +593,13 @@ if (!handleSquirrelEvent()) {
         minWidth: 500,
         minHeight: 500,
         backgroundColor: '#ffffff',
-        show: false,
+        show: isPlaywrightTesting,
         webPreferences: {
           preload: `${__dirname}/preload.js`,
           nodeIntegration: true,
           contextIsolation: false,
           nativeWindowOpen: true,
+          webSecurity: true,
         },
       });
 
@@ -418,6 +683,38 @@ if (!handleSquirrelEvent()) {
     const appReady = async () => {
       createWindow();
       app.applicationMenu = createMenu();
+      protocol.registerFileProtocol(
+        'cached',
+        (request: any, callback: (obj: any) => void) => {
+          const filePath: string = path.join(
+            thumbCacheFolder,
+            request.url.replace(/^cached:\/\//, ''),
+          );
+          callback({ path: filePath });
+        },
+      );
+      mainWindow?.webContents
+        .executeJavaScript('localStorage.getItem("cacheLimitSize");', true)
+        .then((stringValue) => {
+          try {
+            cacheLimitSize = stringValue
+              ? JSON.parse(stringValue)
+              : cacheLimitSize;
+          } catch (e) {
+            console.log(e);
+          }
+        });
+      mainWindow?.webContents
+        .executeJavaScript('localStorage.getItem("cacheFolder");', true)
+        .then((stringValue) => {
+          try {
+            thumbCacheFolder = stringValue
+              ? JSON.parse(stringValue)
+              : thumbCacheFolder;
+          } catch (e) {
+            console.log(e);
+          }
+        });
     };
 
     app.on('ready', appReady);
@@ -435,8 +732,7 @@ if (!handleSquirrelEvent()) {
         mainWindowLaunchTasks.push((window: BrowserWindow) => {
           window.webContents.send('open-file', path);
         });
-      }
-      else {
+      } else {
         mainWindow?.webContents.send('open-file', path);
       }
     });
@@ -450,8 +746,7 @@ if (!handleSquirrelEvent()) {
         mainWindowLaunchTasks.push((window: BrowserWindow) => {
           window.webContents.send('open-url', url);
         });
-      }
-      else {
+      } else {
         mainWindow?.webContents.send('open-url', url);
       }
     });
@@ -470,6 +765,15 @@ if (!handleSquirrelEvent()) {
       i18n.activate(locale);
       app.applicationMenu = createMenu();
     });
+  }
+
+  function validatingInProgress(uri: string, action: string) {
+    if (action === 'stop') {
+      delete validatingProgress[uri];
+    }
+    if (action === 'start') {
+      validatingProgress[uri] = true;
+    }
   }
 
   const getMenuTemplate = () => {

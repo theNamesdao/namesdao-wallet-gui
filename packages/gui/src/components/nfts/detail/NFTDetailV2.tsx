@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Trans } from '@lingui/macro';
+import styled from 'styled-components';
 import {
   Back,
   Flex,
@@ -8,8 +9,8 @@ import {
   useOpenDialog,
 } from '@chia/core';
 import type { NFTInfo } from '@chia/api';
-import { useGetNFTWallets } from '@chia/api-react';
-import { Box, Grid, Typography, IconButton } from '@mui/material';
+import { useGetNFTInfoQuery, useGetNFTWallets } from '@chia/api-react';
+import { Box, Grid, Typography, IconButton, Button } from '@mui/material';
 import { MoreVert } from '@mui/icons-material';
 import { useParams } from 'react-router-dom';
 import NFTPreview from '../NFTPreview';
@@ -22,33 +23,117 @@ import NFTContextualActions, {
   NFTContextualActionTypes,
 } from '../NFTContextualActions';
 import NFTPreviewDialog from '../NFTPreviewDialog';
+import NFTProgressBar from '../NFTProgressBar';
+import { useLocalStorage } from '@chia/api-react';
+import { isImage } from '../../../util/utils.js';
+import { launcherIdFromNFTId } from '../../../util/nfts';
+import isURL from 'validator/lib/isURL';
+import { IpcRenderer } from 'electron';
 
 export default function NFTDetail() {
   const { nftId } = useParams();
+  const { data: nft, isLoading: isLoadingNFT } = useGetNFTInfoQuery({
+    coinId: launcherIdFromNFTId(nftId ?? ''),
+  });
   const { wallets: nftWallets, isLoading: isLoadingWallets } =
     useGetNFTWallets();
-  const openDialog = useOpenDialog();
   const { nfts, isLoading: isLoadingNFTs } = useFetchNFTs(
-    nftWallets.map((wallet: Wallet) => wallet.id),
+    nftWallets.map((wallet) => wallet.id),
+    { skip: !!isLoadingWallets },
   );
 
-  const nft: NFTInfo | undefined = useMemo(() => {
-    if (!nfts) {
-      return;
+  const localNFT = useMemo(() => {
+    if (!nfts || isLoadingNFTs) {
+      return undefined;
     }
     return nfts.find((nft: NFTInfo) => nft.$nftId === nftId);
-  }, [nfts]);
+  }, [nfts, nftId, isLoadingNFTs]);
 
-  const { metadata, isLoading: isLoadingMetadata } = useNFTMetadata(nft);
+  const isLoading = isLoadingNFT;
 
-  const isLoading = isLoadingWallets || isLoadingNFTs || isLoadingMetadata;
+  return isLoading ? (
+    <Loading center />
+  ) : (
+    <NFTDetailLoaded nft={localNFT ?? nft} />
+  );
+}
 
-  if (isLoading) {
-    return <Loading center />;
-  }
+type NFTDetailLoadedProps = {
+  nft: NFTInfo;
+};
+
+function NFTDetailLoaded(props: NFTDetailLoadedProps) {
+  const { nft } = props;
+  const nftId = nft.$nftId;
+  const openDialog = useOpenDialog();
+  const [validationProcessed, setValidationProcessed] = useState(false);
+  const nftRef = React.useRef(null);
+  const [, setIsValid] = useState(false);
+
+  const uri = nft?.dataUris?.[0];
+  const [contentCache] = useLocalStorage(`content-cache-${nftId}`, {});
+  const [validateNFT, setValidateNFT] = useState(false);
+
+  nftRef.current = nft;
+
+  const { metadata, error } = useNFTMetadata([nft]);
+
+  useEffect(() => {
+    return () => {
+      const ipcRenderer: IpcRenderer = (window as any).ipcRenderer;
+      ipcRenderer.invoke('abortFetchingBinary', uri);
+    };
+  }, []);
+
+  // useEffect(() => {
+  //   if (metadata) {
+  //     console.log(JSON.stringify(metadata, null, 2));
+  //   }
+  // }, [metadata]);
+
+  const ValidateContainer = styled.div`
+    padding-top: 25px;
+    text-align: center;
+  `;
+
+  const ErrorMessage = styled.div`
+    color: red;
+  `;
 
   function handleShowFullScreen() {
-    openDialog(<NFTPreviewDialog nft={nft} />);
+    if (isImage(uri)) {
+      openDialog(<NFTPreviewDialog nft={nft} />);
+    }
+  }
+
+  function renderValidationState() {
+    if (!isURL(uri)) return null;
+    if (validateNFT && !validationProcessed) {
+      return <Trans>Validating hash...</Trans>;
+    } else if (contentCache.valid) {
+      return <Trans>Hash is validated.</Trans>;
+    } else if (contentCache.valid === false) {
+      return (
+        <ErrorMessage>
+          <Trans>Hash mismatch.</Trans>
+        </ErrorMessage>
+      );
+    } else {
+      return (
+        <Button
+          onClick={() => setValidateNFT(true)}
+          variant="outlined"
+          size="large"
+        >
+          <Trans>Validate SHA256 SUM</Trans>
+        </Button>
+      );
+    }
+  }
+
+  function fetchBinaryContentDone(valid: boolean) {
+    setValidationProcessed(true);
+    setIsValid(valid);
   }
 
   return (
@@ -75,14 +160,24 @@ export default function NFTDetail() {
             position="relative"
           >
             {nft && (
-              <Box onClick={handleShowFullScreen} sx={{ cursor: 'pointer' }}>
-                <NFTPreview
-                  nft={nft}
-                  width="100%"
-                  height="412px"
-                  fit="contain"
+              <Flex flexDirection="column">
+                <Box onClick={handleShowFullScreen} sx={{ cursor: 'pointer' }}>
+                  <NFTPreview
+                    nft={nft}
+                    width="100%"
+                    height="412px"
+                    fit="contain"
+                    validateNFT={validateNFT}
+                    metadataError={error}
+                  />
+                </Box>
+                <ValidateContainer>{renderValidationState()}</ValidateContainer>
+                <NFTProgressBar
+                  nftIdUrl={`${nft.$nftId}_${uri}`}
+                  setValidateNFT={setValidateNFT}
+                  fetchBinaryContentDone={fetchBinaryContentDone}
                 />
-              </Box>
+              </Flex>
             )}
           </Box>
           <Box position="absolute" left={1} top={1}>
@@ -122,7 +217,7 @@ export default function NFTDetail() {
                     <Trans>Description</Trans>
                   </Typography>
 
-                  <Typography sx={{ whiteSpace : 'pre-line'}} overflow="hidden">
+                  <Typography sx={{ whiteSpace: 'pre-line' }} overflow="hidden">
                     {metadata?.description ?? <Trans>Not Available</Trans>}
                   </Typography>
                 </Flex>
