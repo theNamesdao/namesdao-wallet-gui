@@ -355,7 +355,7 @@ export default function EstimatedFee(props: FeeProps) {
     );
   }
 
-  if (!error && mode[0] === Mode.FARMING && inputType !== 'classic') {
+  if (0) { // This is a horrible way to do this, but easiest way to just show fee option // !error && mode[0] === Mode.FARMING && inputType !== 'classic') {
     return (
       <Flex>
         <FormControl variant="filled" fullWidth>
@@ -363,7 +363,7 @@ export default function EstimatedFee(props: FeeProps) {
         </FormControl>
       </Flex>
     );
-  } else {
+  } else { // Limited wallet mode, etc. we'll use it all the time
     return (
       <Flex>
         <FormControl variant="filled" fullWidth>

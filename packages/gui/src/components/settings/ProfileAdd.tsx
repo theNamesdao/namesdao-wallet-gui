@@ -42,7 +42,7 @@ export default function ProfileAdd() {
       backup_dids: [],
       num_of_backup_ids_needed: '0',
       amount: 1,
-      fee: '',
+      fee: '0.000000000005',
     },
   });
 

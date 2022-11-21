@@ -198,7 +198,7 @@ export function NFTMoveToProfileAction(props: NFTMoveToProfileActionProps) {
     shouldUnregister: false,
     defaultValues: {
       destination: defaultDestination || '',
-      fee: '',
+      fee: '0.000000000005',
     },
   });
   const destination = methods.watch('destination');
