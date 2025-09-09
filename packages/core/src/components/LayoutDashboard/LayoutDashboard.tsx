@@ -1,3 +1,4 @@
+// this file has changed
 import { useGetLoggedInFingerprintQuery, useGetKeyQuery, useFingerprintSettings } from '@chia-network/api-react';
 import { Trans } from '@lingui/macro';
 import { Edit as EditIcon } from '@mui/icons-material';
@@ -230,7 +231,7 @@ export default function LayoutDashboard(props: LayoutDashboardProps) {
                           <Flex flexDirection="column" minWidth={0}>
                             <Flex flexDirection="row" sx={{ height: '39px' }}>
                               <Typography variant="h4" display="flex-inline" noWrap>
-                                {keyData?.label || <Trans>Wallet</Trans>}
+                                {keyData?.label || <Trans>Namesdao .xch Wallet</Trans>}
                               </Typography>
                               <IconButton
                                 onClick={handleEditWalletName}

@@ -1,9 +1,9 @@
 {
   "name": "@chia-network/gui",
-  "author": "Chia Network <hello@chia.net> (https://chia.net/)",
-  "description": "GUI for Chia Blockchain",
+  "author": "Namesdao and Chia Network <hello@chia.net> (https://namesdao.org/)",
+  "description": "GUI for Namesdao and Chia Blockchain",
   "license": "Apache-2.0",
-  "productName": "Chia Blockchain",
+  "productName": "Namesdao .xch Wallet - Chia Blockchain",
   "homepage": "./",
   "main": "build/electron/main.js",
   "engines": {

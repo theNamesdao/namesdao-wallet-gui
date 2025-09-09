@@ -1,3 +1,4 @@
+// this file has been changed
 import React from 'react';
 
 import icon from '../../../assets/img/chia_circle.svg';
@@ -36,7 +37,7 @@ export default function About(props: AboutProps) {
       </a>
       <h3 className="mt-0 mb-4">{description}</h3>
       <div className="mb-4" />
-      <div>Copyright (c) {currentYear} Chia Network</div>
+      <div>Copyright (c) {currentYear} Chia Network & Portions Copyright (c) {currentYear} Namesdao</div>
       <div className="mb-4" />
       <table className="border-collapse text-gray-500 dark:text-gray-400 text-xs">
         {versions?.electron && (
@@ -66,7 +67,7 @@ export default function About(props: AboutProps) {
       </table>
 
       <a
-        href="https://github.com/Chia-Network/chia-blockchain/issues"
+        href="https://github.com/theNamesdao/namesdao-wallet/issues"
         className="absolute right-2 bottom-2 text-blue-500 dark:text-blue-400"
       >
         {i18n._(/* i18n */ { id: 'Report an issue' })}

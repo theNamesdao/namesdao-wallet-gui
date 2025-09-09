@@ -1,3 +1,4 @@
+// this file has changed
 import {
   app,
   dialog,
@@ -998,7 +999,7 @@ function getMenuTemplate() {
           },
         },
         {
-          label: i18n._(/* i18n */ { id: 'Frequently Asked Questions' }),
+          label: i18n._(/* i18n */ { id: 'Chia Wiki Frequently Asked Questions' }),
           click: () => {
             openExternal('https://github.com/Chia-Network/chia-blockchain/wiki/FAQ');
           },
@@ -1006,13 +1007,13 @@ function getMenuTemplate() {
         {
           label: i18n._(/* i18n */ { id: 'Release Notes' }),
           click: () => {
-            openExternal('https://github.com/Chia-Network/chia-blockchain/releases');
+            openExternal('https://github.com/theNamesdao/namesdao-wallet/releases');
           },
         },
         {
           label: i18n._(/* i18n */ { id: 'Contribute on GitHub' }),
           click: () => {
-            openExternal('https://github.com/Chia-Network/chia-blockchain/blob/main/CONTRIBUTING.md');
+            openExternal('https://github.com/theNamesdao/namesdao-wallet/blob/main/CONTRIBUTING.md');
           },
         },
         {
@@ -1021,19 +1022,19 @@ function getMenuTemplate() {
         {
           label: i18n._(/* i18n */ { id: 'Report an Issue...' }),
           click: () => {
-            openExternal('https://github.com/Chia-Network/chia-blockchain/issues');
+            openExternal('https://github.com/theNamesdao/namesdao-wallet/issues');
           },
         },
         {
           label: i18n._(/* i18n */ { id: 'Chat on Discord' }),
           click: () => {
-            openExternal('https://discord.gg/chia');
+            openExternal('https://discord.gg/auCvkTCtYx');
           },
         },
         {
           label: i18n._(/* i18n */ { id: 'Follow on X' }),
           click: () => {
-            openExternal('https://x.com/chia_project');
+            openExternal('https://x.com/theNamesdao');
           },
         },
       ],
@@ -1043,10 +1044,10 @@ function getMenuTemplate() {
   if (process.platform === 'darwin') {
     // Chia Blockchain menu (Mac)
     template.unshift({
-      label: i18n._(/* i18n */ { id: 'Chia' }),
+      label: i18n._(/* i18n */ { id: 'Namesdao' }),
       submenu: [
         {
-          label: i18n._(/* i18n */ { id: 'About Chia Blockchain' }),
+          label: i18n._(/* i18n */ { id: 'About Namesdao .xch Wallet' }),
           click: () => {
             openAbout();
           },
