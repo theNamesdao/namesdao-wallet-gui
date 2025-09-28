@@ -15,7 +15,7 @@ import {
 } from '@chia-network/icons';
 import { Trans } from '@lingui/macro';
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import React from 'react';
 import styled from 'styled-components';
 
@@ -42,6 +42,32 @@ export default function DashboardSideBar(props: DashboardSideBarProps) {
     <Flex height="100%" flexDirection="column">
       <StyledItemsContainer>
         <Flex flexDirection="column" alignItems="center" paddingTop={5}>
+          <Flex
+            flexDirection="row"
+            sx={{
+              height: 'auto',
+              marginBottom: 3,
+              width: '100%',
+              justifyContent: 'center',
+              alignItems: 'center',
+              textAlign: 'center',
+            }}
+          >
+            <Typography
+              variant="h4"
+              fontWeight="bold"
+              color="primary"
+              sx={(theme) => ({
+                fontSize: '0.8rem',
+                padding: '8px 0',
+                width: '100%',
+                textAlign: 'center',
+                color: theme.palette.mode === 'dark' ? theme.palette.primary.main : theme.palette.primary.dark,
+              })}
+            >
+              <Trans>Namesdao .xch</Trans>
+            </Typography>
+          </Flex>
           <SideBarItem
             to="/dashboard/wallets"
             icon={TokensIcon}

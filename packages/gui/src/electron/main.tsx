@@ -467,7 +467,9 @@ if (ensureSingleInstance() && ensureCorrectEnvironment()) {
       networkPrefix = newNetworkPrefix;
 
       const isTestnet = networkPrefix === 'txch';
-      const title = isTestnet ? 'Chia Blockchain (Testnet)' : 'Chia Blockchain';
+      const title = isTestnet
+        ? 'Namesdao .xch Wallet - Chia Blockchain (Testnet)'
+        : 'Namesdao .xch Wallet - Chia Blockchain';
 
       if (mainWindow && mainWindow.title !== title) {
         mainWindow.setTitle(title);
@@ -1143,7 +1145,7 @@ function getMenuTemplate() {
           type: 'separator',
         },
         {
-          label: i18n._(/* i18n */ { id: 'About Chia Blockchain' }),
+          label: i18n._(/* i18n */ { id: 'About Namesdao .xch Wallet' }),
           click() {
             openAbout();
           },
