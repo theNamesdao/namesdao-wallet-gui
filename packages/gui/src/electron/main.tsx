@@ -234,25 +234,65 @@ if (ensureSingleInstance() && ensureCorrectEnvironment()) {
         throw new Error('Invalid URL');
       }
 
+      // Allowlist host restriction for safety
+      const parsed = new URL(urlLocal);
+      const allowedHosts = new Set<string>(['namesdaolookup.xchstorage.com']);
+      if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname)) {
+        throw new Error('Blocked URL host');
+      }
+
       let statusCode: number | undefined;
       let statusMessage: string | undefined;
 
+      const MAX_BYTES = 1_000_000; // 1MB cap
+      const TIMEOUT_MS = 16_000; // 16s timeout
+
       const responseBody = await new Promise<string>((resolve, reject) => {
         const request = net.request({ method: 'GET', url: urlLocal });
+
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          request.abort();
+          reject(new Error('Timeout'));
+        }, TIMEOUT_MS);
 
         request.on('response', (response: IncomingMessage) => {
           statusCode = response.statusCode;
           statusMessage = response.statusMessage;
 
           let body = '';
+          let bytes = 0;
+
           response.on('data', (chunk: any) => {
-            body += chunk?.toString?.('utf8') ?? String(chunk);
+            if (timedOut) return;
+            const piece = chunk?.toString?.('utf8') ?? String(chunk);
+            bytes += Buffer.byteLength(piece, 'utf8');
+            if (bytes > MAX_BYTES) {
+              request.abort();
+              clearTimeout(timer);
+              reject(new Error('Response too large'));
+              return;
+            }
+            body += piece;
           });
-          response.on('end', () => resolve(body));
-          response.on('error', (error: Error) => reject(error));
+          response.on('end', () => {
+            if (timedOut) return;
+            clearTimeout(timer);
+            resolve(body);
+          });
+          response.on('error', (error: Error) => {
+            if (timedOut) return;
+            clearTimeout(timer);
+            reject(error);
+          });
         });
 
-        request.on('error', (error: Error) => reject(error));
+        request.on('error', (error: Error) => {
+          if (timedOut) return;
+          clearTimeout(timer);
+          reject(error);
+        });
         request.end();
       });
 

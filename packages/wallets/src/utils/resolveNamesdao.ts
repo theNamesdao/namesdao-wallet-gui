@@ -1,3 +1,4 @@
+import { validAddress } from '@chia-network/core';
 import { t } from '@lingui/macro';
 
 /**
@@ -15,7 +16,11 @@ export async function resolveNamesdaoIfNeeded(value: string, getType: 'address' 
   if (!/\.xch$/i.test(trimmed)) return trimmed;
 
   const lookupName = trimmed.toLowerCase().replace(/\.xch$/i, '');
-  const url = `https://namesdaolookup.xchstorage.com/${lookupName}.json`;
+  // allow only conservative characters for safety
+  if (!/^[a-z0-9._-]+$/.test(lookupName)) {
+    throw new Error('Invalid .xch name format');
+  }
+  const url = `https://namesdaolookup.xchstorage.com/${encodeURIComponent(lookupName)}.json`;
 
   try {
     // Prefer main-process GET to bypass CORS
@@ -35,6 +40,12 @@ export async function resolveNamesdaoIfNeeded(value: string, getType: 'address' 
       if (!data || !data.address) {
         throw new Error('Lookup JSON missing "address" field');
       }
+      // Validate bech32m address format; will throw on invalid
+      try {
+        validAddress(data.address);
+      } catch (e: any) {
+        throw new Error('Lookup JSON contained invalid address format');
+      }
       return data.address;
     }
 
@@ -47,6 +58,11 @@ export async function resolveNamesdaoIfNeeded(value: string, getType: 'address' 
     const data = await res.json();
     if (!data || !data.address) {
       throw new Error('Lookup JSON missing "address" field');
+    }
+    try {
+      validAddress(data.address);
+    } catch (e: any) {
+      throw new Error('Lookup JSON contained invalid address format');
     }
     return data.address;
   } catch (err: any) {
