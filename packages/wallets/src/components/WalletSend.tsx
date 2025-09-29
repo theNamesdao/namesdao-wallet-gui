@@ -1,3 +1,4 @@
+// this file has changed
 import {
   useGetSyncStatusQuery,
   useSendTransactionMutation,
@@ -40,6 +41,7 @@ import isNumeric from 'validator/es/lib/isNumeric';
 
 import useClawbackDefaultTime, { getClawbackTimeInSeconds } from '../hooks/useClawbackDefaultTime';
 import useWallet from '../hooks/useWallet';
+import { resolveNamesdaoIfNeeded } from '../utils';
 
 import AddressBookAutocomplete from './AddressBookAutocomplete';
 import CreateWalletSendTransactionResultDialog from './WalletSendTransactionResultDialog';
@@ -158,6 +160,17 @@ export default function WalletSend(props: SendCardProps) {
     }
     if (address.startsWith('0x') || address.startsWith('0X')) {
       address = address.slice(2);
+    }
+
+    // Resolve Namesdao .xch name on submit (safety net if blur didn't fire)
+    try {
+      const resolved = await resolveNamesdaoIfNeeded(address, 'address');
+      if (resolved !== address) {
+        address = resolved;
+        methods.setValue('address', address, { shouldValidate: true });
+      }
+    } catch (err) {
+      throw err as Error;
     }
 
     const memo = data.memo.trim();

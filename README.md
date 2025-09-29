@@ -1,12 +1,8 @@
-# chia-blockchain-gui
+# namesdao-wallet-gui
 
-![Chia logo](https://www.chia.net/wp-content/uploads/2022/09/chia-logo.svg)
+Welcome to the Namesdao .xch Wallet fork of the Chia GUI repo!
 
-![GitHub contributors](https://img.shields.io/github/contributors/Chia-Network/chia-blockchain-gui?logo=GitHub)
-
-Welcome to the Chia GUI repo!
-
-Chia GUI is written in TypeScript and uses Electron/React.
+Chia GUI is written in TypeScript and uses Electron/React. This READEME has changed and not all info is up to date for Namesdao .xch wallet.
 
 This monorepo consists of the following packages:
 

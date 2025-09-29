@@ -1,3 +1,4 @@
+// this file has changed
 import API from './API';
 
 enum AppAPI {
@@ -24,6 +25,7 @@ enum AppAPI {
   SHOW_SAVE_DIALOG_AND_SAVE = `${API.APP}:showSaveDialogAndSave`,
 
   FETCH_TEXT_RESPONSE = `${API.APP}:fetchTextResponse`,
+  FETCH_TEXT_GET = `${API.APP}:fetchTextGet`,
   START_MULTIPLE_DOWNLOAD = `${API.APP}:startMultipleDownload`,
 
   DAEMON_EXITED = `${API.APP}:daemonExited`,

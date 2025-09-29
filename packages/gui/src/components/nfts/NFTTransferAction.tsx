@@ -12,7 +12,7 @@ import {
   validAddress,
   useShowError,
 } from '@chia-network/core';
-import { AddressBookAutocomplete } from '@chia-network/wallets';
+import { AddressBookAutocomplete, resolveNamesdaoIfNeeded } from '@chia-network/wallets';
 import { Trans } from '@lingui/macro';
 import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Typography } from '@mui/material';
 import React from 'react';
@@ -80,7 +80,20 @@ export default function NFTTransferAction(props: NFTTransferActionProps) {
       if (!currencyCode) {
         throw new Error('Selected network address prefix is not defined');
       }
-      validAddress(destinationLocal, [currencyCode.toLowerCase()]);
+      // Resolve Namesdao .xch on submit (safety net if blur didn't fire)
+      let destinationResolved = (destinationLocal ?? '').trim();
+      try {
+        const resolved = await resolveNamesdaoIfNeeded(destinationResolved, 'address');
+        if (resolved !== destinationResolved) {
+          destinationResolved = resolved;
+          methods.setValue('destination', destinationResolved, { shouldValidate: true });
+        }
+      } catch (err) {
+        showError(err);
+        return;
+      }
+
+      validAddress(destinationResolved, [currencyCode.toLowerCase()]);
     } catch (error) {
       showError(error);
       return;
@@ -93,7 +106,7 @@ export default function NFTTransferAction(props: NFTTransferActionProps) {
       await transferNFT({
         walletId: nfts[0].walletId,
         nftCoinIds: nfts.map((nft: NFTInfo) => nft.nftCoinId),
-        targetAddress: destinationLocal,
+        targetAddress: destinationResolved,
         fee: feeInMojos,
       }).unwrap();
       success = true;

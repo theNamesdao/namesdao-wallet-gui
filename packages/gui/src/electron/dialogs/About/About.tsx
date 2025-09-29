@@ -37,7 +37,9 @@ export default function About(props: AboutProps) {
       </a>
       <h3 className="mt-0 mb-4">{description}</h3>
       <div className="mb-4" />
-      <div>Copyright (c) {currentYear} Chia Network & Portions Copyright (c) {currentYear} Namesdao</div>
+      <div>
+        Copyright (c) {currentYear} Chia Network & Portions Copyright (c) {currentYear} Namesdao
+      </div>
       <div className="mb-4" />
       <table className="border-collapse text-gray-500 dark:text-gray-400 text-xs">
         {versions?.electron && (

@@ -229,6 +229,36 @@ if (ensureSingleInstance() && ensureCorrectEnvironment()) {
       return { statusCode, statusMessage, responseBody };
     });
 
+    ipcMainHandle(AppAPI.FETCH_TEXT_GET, async (urlLocal: string) => {
+      if (!isValidURL(urlLocal)) {
+        throw new Error('Invalid URL');
+      }
+
+      let statusCode: number | undefined;
+      let statusMessage: string | undefined;
+
+      const responseBody = await new Promise<string>((resolve, reject) => {
+        const request = net.request({ method: 'GET', url: urlLocal });
+
+        request.on('response', (response: IncomingMessage) => {
+          statusCode = response.statusCode;
+          statusMessage = response.statusMessage;
+
+          let body = '';
+          response.on('data', (chunk: any) => {
+            body += chunk?.toString?.('utf8') ?? String(chunk);
+          });
+          response.on('end', () => resolve(body));
+          response.on('error', (error: Error) => reject(error));
+        });
+
+        request.on('error', (error: Error) => reject(error));
+        request.end();
+      });
+
+      return { statusCode, statusMessage, responseBody };
+    });
+
     ipcMainHandle(AppAPI.SHOW_OPEN_DIRECTORY_DIALOG, async (options: { defaultPath?: string } = {}) => {
       const { defaultPath } = options;
 

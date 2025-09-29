@@ -1,3 +1,4 @@
+// this file has changed
 import { contextBridge, ipcRenderer } from 'electron';
 
 import API from './constants/API';
@@ -33,6 +34,7 @@ contextBridge.exposeInMainWorld(API.APP, {
   showNotification: (options: { title: string; body: string }) =>
     invokeWithCustomErrors(AppAPI.SHOW_NOTIFICATION, options),
   fetchTextResponse: (url: string, data: string) => invokeWithCustomErrors(AppAPI.FETCH_TEXT_RESPONSE, url, data),
+  fetchTextGet: (url: string) => invokeWithCustomErrors(AppAPI.FETCH_TEXT_GET, url),
   openKeyDetail: (fingerprint: string) => invokeWithCustomErrors(AppAPI.OPEN_KEY_DETAIL, fingerprint),
 
   download: (url: string) => invokeWithCustomErrors(AppAPI.DOWNLOAD, url),
