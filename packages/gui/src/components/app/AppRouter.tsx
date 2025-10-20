@@ -10,6 +10,7 @@ import DashboardSideBar from '../dashboard/DashboardSideBar';
 import Farm from '../farm/Farm';
 import FullNode from '../fullNode/FullNode';
 import Harvest from '../harvest/Harvest';
+import Names from '../names/Names';
 import NFTs from '../nfts/NFTs';
 import { CreateOffer } from '../offers/OfferManager';
 import Plot from '../plot/Plot';
@@ -43,6 +44,7 @@ export default function AppRouter() {
               <Route path="dashboard/offers/*" element={<CreateOffer />} />
               <Route path="dashboard/nfts/*" element={<NFTs />} />
               <Route path="dashboard/vc/*" element={<VCs />} />
+              <Route path="dashboard/names/*" element={<Names />} />
               <Route path="dashboard/*" element={<Navigate to="wallets" />} />
               <Route path="dashboard/settings/*" element={<Settings />} />
               <Route path="dashboard/addressbook/*" element={<AddressBook />} />
@@ -56,6 +58,7 @@ export default function AppRouter() {
               <Route path="dashboard/offers/*" element={<CreateOffer />} />
               <Route path="dashboard/nfts/*" element={<NFTs />} />
               <Route path="dashboard/vc/*" element={<VCs />} />
+              <Route path="dashboard/names/*" element={<Names />} />
               <Route path="dashboard/settings/*" element={<Settings />} />
               <Route path="dashboard/harvest/*" element={<Harvest />} />
               <Route path="dashboard/plot/*" element={<Plot />} />

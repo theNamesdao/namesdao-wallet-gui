@@ -14,6 +14,7 @@ import {
   Settings as SettingsIcon,
   Contacts as AddressBookIcon,
   VC as VCIcon,
+  Home as NamesIcon,
 } from '@chia-network/icons';
 import { Trans } from '@lingui/macro';
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
@@ -82,6 +83,18 @@ export default function DashboardSideBar(props: DashboardSideBarProps) {
             title={<Trans>NFTs</Trans>}
             data-testid="DashboardSideBar-nfts"
           />
+          <SideBarItem
+            to="/dashboard/names"
+            icon={NamesIcon}
+            title={<Trans>Names</Trans>}
+            data-testid="DashboardSideBar-names"
+          />
+          <SideBarItem
+            to="/dashboard/offers"
+            icon={OffersIcon}
+            title={<Trans>Offers</Trans>}
+            data-testid="DashboardSideBar-offers"
+          />
           {enableVerifiableCredentials && (
             <SideBarItem
               to="/dashboard/vc"
@@ -90,12 +103,6 @@ export default function DashboardSideBar(props: DashboardSideBarProps) {
               data-testid="DashboardSideBar-vc"
             />
           )}
-          <SideBarItem
-            to="/dashboard/offers"
-            icon={OffersIcon}
-            title={<Trans>Offers</Trans>}
-            data-testid="DashboardSideBar-offers"
-          />
           <SideBarItem
             to="/dashboard/addressbook"
             icon={AddressBookIcon}

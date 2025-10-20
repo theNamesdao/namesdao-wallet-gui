@@ -236,7 +236,11 @@ if (ensureSingleInstance() && ensureCorrectEnvironment()) {
 
       // Allowlist host restriction for safety
       const parsed = new URL(urlLocal);
-      const allowedHosts = new Set<string>(['namesdaolookup.xchstorage.com']);
+      const allowedHosts = new Set<string>([
+        'namesdaolookup.xchstorage.com',
+        'storage1.xchstorage.cyou',
+        'api.namesdao.org',
+      ]);
       if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname)) {
         throw new Error('Blocked URL host');
       }
