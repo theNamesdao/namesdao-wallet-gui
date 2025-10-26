@@ -48,10 +48,7 @@ export async function getInfo(): Promise<{ paymentAddress: string; publicKey: st
   return getJSON(url);
 }
 
-export async function getPricingTiers(): Promise<{ tiers: any[]; assetIds: Record<string, string> }> {
-  const url = `${baseUrl()}/v1/get_pricing_tiers`;
-  return getJSON(url);
-}
+// getPricingTiers is now implemented using priceService.ts
 
 export async function resolveNamesdaoName(nameOrDotXch: string): Promise<string> {
   const trimmed = (nameOrDotXch || '').toString().trim().toLowerCase();

@@ -1,11 +1,12 @@
 import { Card, Flex, Form, Button, Loading } from '@chia-network/core';
 import { Trans, t } from '@lingui/macro';
 import { Alert, Box, Typography, TextField as MuiTextField } from '@mui/material';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
 import { checkAvailability } from '../../utils/namesdaoApi';
+import { getPrices, areFallbackPrices, type PriceTier } from '../../utils/priceService';
 
 type FormData = {
   name: string;
@@ -20,6 +21,15 @@ export default function NameSearch() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inputName, setInputName] = useState('');
+  const [prices, setPrices] = useState<PriceTier[] | null>(null);
+
+  useEffect(() => {
+    async function loadPrices() {
+      const priceData = await getPrices();
+      setPrices(priceData);
+    }
+    loadPrices();
+  }, []);
 
   const methods = useForm<FormData>({
     defaultValues: {
@@ -162,50 +172,23 @@ export default function NameSearch() {
               <Typography variant="h6" gutterBottom>
                 <Trans>Registration Fees</Trans>
               </Typography>
-              <Flex flexDirection="column" gap={1}>
-                <Typography variant="body2">
-                  •{' '}
-                  <strong>
-                    <Trans>4 characters:</Trans>
-                  </strong>{' '}
-                  <Trans>120 NAME or 5 XCH</Trans>
-                </Typography>
-                <Typography variant="body2">
-                  •{' '}
-                  <strong>
-                    <Trans>5 characters:</Trans>
-                  </strong>{' '}
-                  <Trans>20 NAME or 0.62 XCH</Trans>
-                </Typography>
-                <Typography variant="body2">
-                  •{' '}
-                  <strong>
-                    <Trans>6 characters:</Trans>
-                  </strong>{' '}
-                  <Trans>10 NAME or 0.31 XCH</Trans>
-                </Typography>
-                <Typography variant="body2">
-                  •{' '}
-                  <strong>
-                    <Trans>7+ characters:</Trans>
-                  </strong>{' '}
-                  <Trans>5 NAME or 0.19 XCH</Trans>
-                </Typography>
-                <Typography variant="body2">
-                  •{' '}
-                  <strong>
-                    <Trans>1-2 underscores (1u), 5+ characters:</Trans>
-                  </strong>{' '}
-                  <Trans>0.5 NAME or 0.018 XCH</Trans>
-                </Typography>
-                <Typography variant="body2">
-                  •{' '}
-                  <strong>
-                    <Trans>3+ underscores (3u), 5+ characters:</Trans>
-                  </strong>{' '}
-                  <Trans>Free (1 mojo XCH)</Trans>
-                </Typography>
-              </Flex>
+              {!prices ? (
+                <Loading size={24} />
+              ) : (
+                <Flex flexDirection="column" gap={1}>
+                  {prices.map((tier) => (
+                    <Typography key={tier.label} variant="body2">
+                      • <strong>{tier.label}:</strong>{' '}
+                      {tier.namePrice > 0 ? `${tier.namePrice} NAME or ${tier.xchPrice} XCH` : t`Free (1 mojo XCH)`}
+                    </Typography>
+                  ))}
+                  {areFallbackPrices(prices) && (
+                    <Typography variant="caption" color="textSecondary">
+                      <Trans>Showing cached prices - updates may be delayed</Trans>
+                    </Typography>
+                  )}
+                </Flex>
+              )}
             </Box>
           </Flex>
         </Form>

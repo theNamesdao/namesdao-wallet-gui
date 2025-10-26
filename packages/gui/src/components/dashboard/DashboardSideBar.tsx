@@ -14,9 +14,9 @@ import {
   Settings as SettingsIcon,
   Contacts as AddressBookIcon,
   VC as VCIcon,
-  Home as NamesIcon,
 } from '@chia-network/icons';
 import { Trans } from '@lingui/macro';
+import BadgeIcon from '@mui/icons-material/Badge';
 import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import { Box, Typography } from '@mui/material';
 import React from 'react';
@@ -85,7 +85,7 @@ export default function DashboardSideBar(props: DashboardSideBarProps) {
           />
           <SideBarItem
             to="/dashboard/names"
-            icon={NamesIcon}
+            icon={BadgeIcon}
             title={<Trans>Names</Trans>}
             data-testid="DashboardSideBar-names"
           />
