@@ -57,7 +57,15 @@ export default function NFTProvider(props: NFTProviderProps) {
 
   // immutable function
   const getNFT = useCallback(
-    (id: string) => {
+    (id: string | undefined) => {
+      if (!id) {
+        return {
+          nft: undefined,
+          isLoading: false,
+          error: new Error('Invalid NFT id'),
+        };
+      }
+
       const nftDataState = getNFTData(id);
       if (nftDataState.nft) {
         return nftDataState;
@@ -103,7 +111,8 @@ export default function NFTProvider(props: NFTProviderProps) {
   });
 
   const subscribeToNFTChanges = useCallback(
-    (id: string, callback: (nft: any) => void) => {
+    (id: string | undefined, callback: (nft: any) => void) => {
+      if (!id) return () => {};
       const unsubscribeData = subscribeToNFTDataChanges(id, callback);
       const unsubscribeNachos = subscribeToNFTNachosChanges(id, callback);
       const unsubscribeDemand = subscribeToNFTOnDemandChanges(id, callback);
@@ -197,11 +206,29 @@ export default function NFTProvider(props: NFTProviderProps) {
 
       // mutable state
       isLoading,
-      error,
+      error: error as Error | undefined,
 
       count,
       loaded,
       progress,
+
+      // initialization helpers (computed at consume time to use latest values)
+      get isInitialized() {
+        // Initialized when initial processing finished (not loading). Count may be 0.
+        return !isLoading;
+      },
+      ensureInitialized: () => {
+        if (!isLoading) return Promise.resolve();
+        // Wait until isLoading flips to false. Poll; subscribeToChanges may fire too often.
+        return new Promise<void>((resolve) => {
+          const interval = setInterval(() => {
+            if (!isLoading) {
+              clearInterval(interval);
+              resolve();
+            }
+          }, 100);
+        });
+      },
     }),
     [
       nfts,

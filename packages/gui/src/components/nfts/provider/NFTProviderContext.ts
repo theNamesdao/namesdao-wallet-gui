@@ -16,6 +16,9 @@ const NFTProviderContext = createContext<
       isLoading: boolean;
       error: Error | undefined;
 
+      isInitialized: boolean;
+      ensureInitialized: () => Promise<void>;
+
       invalidate: (id: string | undefined) => Promise<void>;
 
       subscribeToChanges: (callback: () => void) => () => void;

@@ -16,7 +16,8 @@ import BigNumber from 'bignumber.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
-import { checkAvailability, getInfo, getPricingTiers, resolveNamesdaoName } from '../../utils/namesdaoApi';
+import { checkAvailability, getInfo, resolveNamesdaoName } from '../../utils/namesdaoApi';
+import { getPrices, type PriceTier } from '../../utils/priceService';
 
 export default function NameRegistration() {
   const { name } = useParams<{ name: string }>();
@@ -28,19 +29,61 @@ export default function NameRegistration() {
   const [sending, setSending] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [info, setInfo] = useState<{ paymentAddress: string } | null>(null);
-  const [assetIds, setAssetIds] = useState<Record<string, string> | null>(null);
-  const [pricingState, setPricingState] = useState<any>(location.state?.pricing || null);
+  // pricing and asset ids are not needed with priceService-based display
+  const [pricesList, setPricesList] = useState<PriceTier[] | null>(null);
   const [sendTransaction] = useSendTransactionMutation();
   const [spendCAT] = useSpendCATMutation();
   const { data: walletsData } = useGetWalletsQuery();
 
-  const pricing = pricingState || {};
-  const xchAmount = pricing.XCH || null;
-  const nameAssetId = assetIds?.NAME || null;
-  const nameAmount = nameAssetId ? pricing[nameAssetId] || null : null;
+  // priceService is the source of truth for pricing display
   const yearsNum = Math.min(100, Math.max(1, Number.parseInt(years || '1', 10) || 1));
-  const totalXch = xchAmount ? new BigNumber(xchAmount).times(yearsNum).toString(10) : null;
-  const totalName = nameAmount ? new BigNumber(nameAmount).times(yearsNum).toString(10) : null;
+  function normalizeBaseName(n: string | undefined) {
+    const base = (n || '')
+      .toLowerCase()
+      .trim()
+      .replace(/\.xch$/i, '');
+    return base;
+  }
+
+  function countLeadingUnderscores(n: string) {
+    const m = n.match(/^_+/);
+    return m ? m[0].length : 0;
+  }
+
+  const pickTierForName = React.useCallback((nameBase: string, tiers: PriceTier[]): PriceTier | null => {
+    if (!nameBase) return null;
+    const underscores = countLeadingUnderscores(nameBase);
+    const len = nameBase.length;
+    // Prefer underscore tiers if criteria met
+    if (underscores >= 3 && len >= 5) {
+      return tiers.find((tier) => tier.label.includes('3+ underscores')) || null;
+    }
+    if (underscores >= 1 && len >= 5) {
+      return tiers.find((tier) => tier.label.includes('1-2 underscores')) || null;
+    }
+    // Fallback to length-based tiers
+    if (len === 4) return tiers.find((tier) => tier.label.startsWith('4 characters')) || null;
+    if (len === 5) return tiers.find((tier) => tier.label.startsWith('5 characters')) || null;
+    if (len === 6) return tiers.find((tier) => tier.label.startsWith('6 characters')) || null;
+    if (len >= 7) return tiers.find((tier) => tier.label.startsWith('7+ characters')) || null;
+    return null;
+  }, []);
+
+  const perYearXch = useMemo(() => {
+    if (!pricesList || !name) return null;
+    const base = normalizeBaseName(name);
+    const tier = pickTierForName(base, pricesList);
+    return tier?.xchPrice ?? null;
+  }, [pricesList, name, pickTierForName]);
+
+  const totalXch = perYearXch ? new BigNumber(perYearXch).times(yearsNum).toString(10) : null;
+  const perYearName = useMemo(() => {
+    if (!pricesList || !name) return null;
+    const base = normalizeBaseName(name);
+    const tier = pickTierForName(base, pricesList);
+    return tier?.namePrice ?? null;
+  }, [pricesList, name, pickTierForName]);
+  const totalName = perYearName ? new BigNumber(perYearName).times(yearsNum).toString(10) : null;
 
   const standardWalletId = useMemo(() => {
     const list: any[] = walletsData || [];
@@ -48,15 +91,26 @@ export default function NameRegistration() {
     return wallet?.id;
   }, [walletsData]);
 
-  const nameWalletId = useMemo(() => {
-    if (!nameAssetId) return undefined;
+  const nameWallet = useMemo(() => {
     const list: any[] = walletsData || [];
-    const wallet = list.find(
-      (item) =>
-        [WalletType.CAT, WalletType.RCAT, WalletType.CRCAT].includes(item.type) && item?.meta?.assetId === nameAssetId,
-    );
-    return wallet?.id;
-  }, [walletsData, nameAssetId]);
+    const lower = (s: any) => (typeof s === 'string' ? s.toLowerCase() : '');
+    return list.find((item) => {
+      if (![WalletType.CAT, WalletType.RCAT, WalletType.CRCAT].includes(item.type)) return false;
+      const meta = item?.meta || {};
+      const ticker = lower(meta.ticker);
+      const nm = lower(meta.name);
+      if (ticker === 'name') return true;
+      if (nm === 'namesdao name' || nm === 'name') return true;
+      return false;
+    });
+  }, [walletsData]);
+
+  const nameWalletId = nameWallet?.id;
+
+  const isRenewMode = useMemo(() => {
+    const sp = new URLSearchParams(location.search);
+    return sp.get('mode') === 'renew';
+  }, [location.search]);
 
   function handleBack() {
     navigate('/dashboard/names');
@@ -70,19 +124,15 @@ export default function NameRegistration() {
     (async () => {
       try {
         setApiError(null);
-        const [infoRes, tiers] = await Promise.all([getInfo(), getPricingTiers()]);
+        const [infoRes, tiers] = await Promise.all([getInfo(), getPrices()]);
         setInfo({ paymentAddress: infoRes.paymentAddress });
-        setAssetIds(tiers.assetIds || {});
-        if (!pricingState && name) {
-          const resp = await checkAvailability(name);
-          const r = resp?.results?.[0];
-          if (r?.pricing) setPricingState(r.pricing);
-        }
+        setPricesList(tiers);
+        // Asset IDs are not provided by getPrices(); leaving NAME payments disabled until asset IDs source is added
       } catch (e: any) {
         setApiError(e?.message || String(e));
       }
     })();
-  }, [pricingState, name]);
+  }, [name]);
 
   async function handleRegister() {
     if (!name) return;
@@ -92,16 +142,30 @@ export default function NameRegistration() {
     try {
       const avail = await checkAvailability(name);
       const r = avail?.results?.[0];
-      if (!r || r.status !== 'available') {
-        throw new Error(t`Name is no longer available` as any);
+      if (!r) {
+        throw new Error(t`Unexpected response format` as any);
       }
       const destAlias = info?.paymentAddress || 'namesdao.xch';
       const address = await resolveNamesdaoName(destAlias);
-      const memos = [name];
+      let memos: string[] = [];
+      if (isRenewMode) {
+        if (r.status === 'grace_period') {
+          memos = [`${name}.xch:${name}.xch`];
+        } else if (r.status === 'available') {
+          memos = [name];
+        } else {
+          throw new Error(t`Cannot renew at this time` as any);
+        }
+      } else {
+        if (r.status !== 'available') {
+          throw new Error(t`Name is no longer available` as any);
+        }
+        memos = [name];
+      }
       if (paymentMethod === 'xch') {
         if (!standardWalletId) throw new Error(t`No standard wallet found` as any);
-        if (!xchAmount) throw new Error(t`Missing XCH amount` as any);
-        const amount = chiaToMojo(new BigNumber(xchAmount).times(yearsNum));
+        if (!totalXch) throw new Error(t`Missing XCH amount` as any);
+        const amount = chiaToMojo(new BigNumber(totalXch));
         const feeMojo = chiaToMojo((fee || '0').trim() || '0');
         await sendTransaction({
           walletId: standardWalletId,
@@ -114,10 +178,9 @@ export default function NameRegistration() {
         navigate('/dashboard/wallets');
       }
       if (paymentMethod === 'name') {
-        if (!nameAssetId) throw new Error(t`NAME assetId unknown` as any);
         if (!nameWalletId) throw new Error(t`Add the NAME token wallet to pay with NAME` as any);
-        if (!nameAmount) throw new Error(t`Missing NAME amount` as any);
-        const amount = catToMojo(new BigNumber(nameAmount).times(yearsNum));
+        if (!totalName) throw new Error(t`Missing NAME amount` as any);
+        const amount = catToMojo(new BigNumber(totalName));
         const feeMojo = chiaToMojo((fee || '0').trim() || '0');
         await spendCAT({
           walletId: nameWalletId,
@@ -141,21 +204,23 @@ export default function NameRegistration() {
       <Flex alignItems="center" gap={1}>
         <Back onClick={handleBack} />
         <Typography variant="h4">
-          <Trans>Register {name}.xch</Trans>
+          {isRenewMode ? <Trans>Renew {name}.xch</Trans> : <Trans>Register {name}.xch</Trans>}
         </Typography>
       </Flex>
 
       <Card>
         <Flex flexDirection="column" gap={3}>
-          <Alert severity="success">
-            <Trans>
-              <strong>{name}.xch</strong> is available!
-            </Trans>
-          </Alert>
+          {!isRenewMode && (
+            <Alert severity="success">
+              <Trans>
+                <strong>{name}.xch</strong> is available!
+              </Trans>
+            </Alert>
+          )}
 
           <Box>
             <Typography variant="h6" gutterBottom>
-              <Trans>Registration Details</Trans>
+              {isRenewMode ? <Trans>Renewal Details</Trans> : <Trans>Registration Details</Trans>}
             </Typography>
             <Typography variant="body1">
               <Trans>Name:</Trans> <strong>{name}.xch</strong>
@@ -183,7 +248,8 @@ export default function NameRegistration() {
               type="number"
               inputProps={{ min: 1, max: 100, step: 1 }}
               variant="filled"
-              fullWidth
+              size="small"
+              sx={{ width: '10ch' }}
             />
           </Box>
 
@@ -197,7 +263,7 @@ export default function NameRegistration() {
               <FormControlLabel
                 value="name"
                 control={<Radio />}
-                disabled={!totalName}
+                disabled={!(nameWalletId && totalName)}
                 label={t`Pay with NAME token (${totalName ?? '?'} NAME)`}
               />
             </RadioGroup>
@@ -239,7 +305,7 @@ export default function NameRegistration() {
               disabled={sending || (!totalXch && !totalName)}
               onClick={handleRegister}
             >
-              <Trans>Register</Trans>
+              {isRenewMode ? <Trans>Renew</Trans> : <Trans>Register</Trans>}
             </Button>
           </Flex>
           {apiError && <Alert severity="error">{apiError}</Alert>}
