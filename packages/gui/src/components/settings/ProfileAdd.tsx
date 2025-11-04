@@ -24,6 +24,7 @@ import styled from 'styled-components';
 import isNumeric from 'validator/es/lib/isNumeric';
 
 import useOpenExternal from '../../hooks/useOpenExternal';
+import { MIN_FEE_XCH, clampMinFeeMojo } from '../../utils/fees';
 
 const StyledCard = styled(Card)(
   ({ theme }) => `
@@ -49,7 +50,7 @@ export default function ProfileAdd() {
       num_of_backup_ids_needed: '0',
       name: '',
       amount: 1,
-      fee: '',
+      fee: MIN_FEE_XCH,
     },
   });
 
@@ -91,6 +92,9 @@ export default function ProfileAdd() {
       walletName = undefined;
     }
 
+    // Convert to mojos and clamp to minimum 1 mojo (shared util)
+    const feeMojo = clampMinFeeMojo(chiaToMojo(fee));
+
     const walletId = await createProfile({
       walletType: 'did_wallet',
       options: {
@@ -98,7 +102,7 @@ export default function ProfileAdd() {
         backup_dids: [],
         num_of_backup_ids_needed: '0',
         amount: 1,
-        fee: chiaToMojo(fee),
+        fee: feeMojo,
         walletName,
       },
     }).unwrap();

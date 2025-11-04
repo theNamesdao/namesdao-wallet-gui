@@ -1,4 +1,5 @@
-import { useGetHeightInfoQuery, useGetSyncStatusQuery } from '@chia-network/api-react';
+import type { NFTInfo } from '@chia-network/api';
+import { useGetHeightInfoQuery, useGetSyncStatusQuery, useGetDIDsQuery } from '@chia-network/api-react';
 import { Flex, Loading } from '@chia-network/core';
 import { Trans } from '@lingui/macro';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -20,7 +21,10 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import useMyNamesdaoNames from '../../hooks/useMyNamesdaoNames';
+import { didToDIDId } from '../../util/dids';
+import removeHexPrefix from '../../util/removeHexPrefix';
 import { GRACE_PERIOD_BLOCKS, formatDotXch } from '../../utils/namesdaoNames';
+import NFTMoveToProfileDialog from '../nfts/NFTMoveToProfileDialog';
 
 function underscorePrefixCount(name: string) {
   const m = name.match(/^_+/);
@@ -55,6 +59,7 @@ export default function NamesOwnedList() {
   const { entries, isLoading } = useMyNamesdaoNames();
   const { data: currentHeight, isLoading: isLoadingHeight } = useGetHeightInfoQuery();
   const { data: syncStatus, isLoading: isLoadingSync } = useGetSyncStatusQuery();
+  const { data: didWallets } = useGetDIDsQuery();
   const synced = !!syncStatus?.synced;
 
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -65,6 +70,8 @@ export default function NamesOwnedList() {
 
   const [configureOpen, setConfigureOpen] = useState(false);
   const [configureUrl, setConfigureUrl] = useState('');
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveNft, setMoveNft] = useState<NFTInfo | null>(null);
 
   const openMenu = useCallback(
     (event: React.MouseEvent<HTMLElement>, name: string, status: 'active' | 'grace' | 'expired' | 'unknown') => {
@@ -95,10 +102,44 @@ export default function NamesOwnedList() {
 
   const handleConfigure = useCallback(() => {
     if (!menuContext) return;
+    const { name } = menuContext;
+    const entry = entries.find((e) => e.name === name);
     closeMenu();
-    setConfigureUrl('https://');
-    setConfigureOpen(true);
-  }, [menuContext, closeMenu]);
+    if (!entry) return;
+
+    // Determine if owned by one of user's DIDs
+    const ownerDidHex = entry.nft.ownerDid || undefined;
+    const ownerDidId = ownerDidHex ? didToDIDId(removeHexPrefix(ownerDidHex)) : undefined;
+    const didList: any[] = (didWallets as any) || [];
+    const userDidIds = new Set<string>(didList.map((w: any) => w.myDid ?? w.mydid).filter(Boolean));
+
+    if (ownerDidId && userDidIds.has(ownerDidId)) {
+      // Eligible: open Configure dialog
+      setConfigureUrl('https://');
+      setConfigureOpen(true);
+      return;
+    }
+
+    if (didList.length > 0) {
+      // Has DID(s) but NFT not owned by a user DID -> prompt move to profile
+      setMoveNft(entry.nft);
+      setMoveOpen(true);
+      return;
+    }
+
+    // No DID -> navigate to create profile
+    navigate('/dashboard/settings/profiles/add');
+  }, [menuContext, closeMenu, entries, didWallets, navigate]);
+
+  const handleMoveToProfile = useCallback(() => {
+    if (!menuContext) return;
+    const { name } = menuContext;
+    const entry = entries.find((e) => e.name === name);
+    closeMenu();
+    if (!entry) return;
+    setMoveNft(entry.nft);
+    setMoveOpen(true);
+  }, [menuContext, entries, closeMenu]);
 
   const groups = useMemo(() => {
     const g: Record<string, { name: string; expiryBlock: number }[]> = {
@@ -259,9 +300,14 @@ export default function NamesOwnedList() {
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
         {menuContext?.status === 'active' && (
-          <MenuItem onClick={handleConfigure} aria-label="configure-xch-limo">
-            <Trans>Configure .xch.limo Website</Trans>
-          </MenuItem>
+          <>
+            <MenuItem onClick={handleConfigure} aria-label="configure-xch-limo">
+              <Trans>Configure .xch.limo Website</Trans>
+            </MenuItem>
+            <MenuItem onClick={handleMoveToProfile} aria-label="move-to-profile">
+              <Trans>Move to Profile</Trans>
+            </MenuItem>
+          </>
         )}
         {(menuContext?.status === 'grace' || menuContext?.status === 'expired') && (
           <MenuItem onClick={handleRenew} aria-label="renew-name">
@@ -293,6 +339,8 @@ export default function NamesOwnedList() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <NFTMoveToProfileDialog open={moveOpen} onClose={() => setMoveOpen(false)} nfts={moveNft ? [moveNft] : []} />
     </Box>
   );
 }

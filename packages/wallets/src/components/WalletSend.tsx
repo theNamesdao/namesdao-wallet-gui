@@ -167,7 +167,6 @@ export default function WalletSend(props: SendCardProps) {
       const resolved = await resolveNamesdaoIfNeeded(address, 'address');
       if (resolved !== address) {
         address = resolved;
-        methods.setValue('address', address, { shouldValidate: true });
       }
     } catch (err) {
       throw err as Error;

@@ -1,5 +1,10 @@
 import { WalletType } from '@chia-network/api';
-import { useSendTransactionMutation, useGetWalletsQuery, useSpendCATMutation } from '@chia-network/api-react';
+import {
+  useSendTransactionMutation,
+  useGetWalletsQuery,
+  useSpendCATMutation,
+  useGetCurrentAddressQuery,
+} from '@chia-network/api-react';
 import { Card, Flex, Button, Back, chiaToMojo, catToMojo } from '@chia-network/core';
 import { Trans, t } from '@lingui/macro';
 import {
@@ -16,19 +21,28 @@ import BigNumber from 'bignumber.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
+import { NAMESDAO_RECIPIENT_PUBKEY } from '../../constants/namesdaoPubkey';
+import { cloakMemo } from '../../utils/cloakMemo';
 import { checkAvailability, getInfo, resolveNamesdaoName } from '../../utils/namesdaoApi';
-import { getPrices, type PriceTier } from '../../utils/priceService';
+import {
+  getPrices,
+  formatXchPrice,
+  formatNamePrice,
+  formatSbxPrice,
+  formatAirPrice,
+  type PriceTier,
+} from '../../utils/priceService';
 
 export default function NameRegistration() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const [paymentMethod, setPaymentMethod] = useState<'xch' | 'name'>('xch');
+  const [paymentMethod, setPaymentMethod] = useState<'xch' | 'name' | 'sbx' | 'air'>('xch');
   const [fee, setFee] = useState<string>('0');
   const [years, setYears] = useState<string>('1');
   const [sending, setSending] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [info, setInfo] = useState<{ paymentAddress: string } | null>(null);
+  const [info, setInfo] = useState<{ paymentAddress: string; publicKey?: string } | null>(null);
   // pricing and asset ids are not needed with priceService-based display
   const [pricesList, setPricesList] = useState<PriceTier[] | null>(null);
   const [sendTransaction] = useSendTransactionMutation();
@@ -55,11 +69,11 @@ export default function NameRegistration() {
     const underscores = countLeadingUnderscores(nameBase);
     const len = nameBase.length;
     // Prefer underscore tiers if criteria met
-    if (underscores >= 3 && len >= 5) {
-      return tiers.find((tier) => tier.label.includes('3+ underscores')) || null;
+    if (underscores >= 3 && len >= 4) {
+      return tiers.find((tier) => tier.label.includes('3 underscores')) || null;
     }
-    if (underscores >= 1 && len >= 5) {
-      return tiers.find((tier) => tier.label.includes('1-2 underscores')) || null;
+    if (underscores >= 1 && len >= 4) {
+      return tiers.find((tier) => tier.label.includes('1 underscore')) || null;
     }
     // Fallback to length-based tiers
     if (len === 4) return tiers.find((tier) => tier.label.startsWith('4 characters')) || null;
@@ -76,14 +90,36 @@ export default function NameRegistration() {
     return tier?.xchPrice ?? null;
   }, [pricesList, name, pickTierForName]);
 
-  const totalXch = perYearXch ? new BigNumber(perYearXch).times(yearsNum).toString(10) : null;
   const perYearName = useMemo(() => {
     if (!pricesList || !name) return null;
     const base = normalizeBaseName(name);
     const tier = pickTierForName(base, pricesList);
     return tier?.namePrice ?? null;
   }, [pricesList, name, pickTierForName]);
-  const totalName = perYearName ? new BigNumber(perYearName).times(yearsNum).toString(10) : null;
+
+  const perYearSbx = useMemo(() => {
+    if (!pricesList || !name) return null;
+    const base = normalizeBaseName(name);
+    const tier = pickTierForName(base, pricesList);
+    return tier?.sbxPrice ?? null;
+  }, [pricesList, name, pickTierForName]);
+
+  const perYearAir = useMemo(() => {
+    if (!pricesList || !name) return null;
+    const base = normalizeBaseName(name);
+    const tier = pickTierForName(base, pricesList);
+    return tier?.airPrice ?? null;
+  }, [pricesList, name, pickTierForName]);
+
+  const totalXch = perYearXch !== null ? new BigNumber(perYearXch).times(yearsNum).toString(10) : null;
+  const totalName = perYearName !== null ? new BigNumber(perYearName).times(yearsNum).toString(10) : null;
+  const totalSbx = perYearSbx !== null ? new BigNumber(perYearSbx).times(yearsNum).toString(10) : null;
+  const totalAir = perYearAir !== null ? new BigNumber(perYearAir).times(yearsNum).toString(10) : null;
+
+  const totalDisplayXch = totalXch !== null ? formatXchPrice(parseFloat(totalXch)) : null;
+  const totalDisplayName = totalName !== null ? formatNamePrice(parseFloat(totalName)) : null;
+  const totalDisplaySbx = totalSbx !== null ? formatSbxPrice(parseFloat(totalSbx)) : null;
+  const totalDisplayAir = totalAir !== null ? formatAirPrice(parseFloat(totalAir)) : null;
 
   const standardWalletId = useMemo(() => {
     const list: any[] = walletsData || [];
@@ -105,34 +141,87 @@ export default function NameRegistration() {
     });
   }, [walletsData]);
 
+  const sbxWallet = useMemo(() => {
+    const list: any[] = walletsData || [];
+    const lower = (s: any) => (typeof s === 'string' ? s.toLowerCase() : '');
+    return list.find((item) => {
+      if (![WalletType.CAT, WalletType.RCAT, WalletType.CRCAT].includes(item.type)) return false;
+      const meta = item?.meta || {};
+      const ticker = lower(meta.ticker);
+      const nm = lower(meta.name);
+      if (ticker === 'sbx') return true;
+      if (nm === 'sbx' || nm.includes('sbx')) return true;
+      return false;
+    });
+  }, [walletsData]);
+
+  const airWallet = useMemo(() => {
+    const list: any[] = walletsData || [];
+    const lower = (s: any) => (typeof s === 'string' ? s.toLowerCase() : '');
+    return list.find((item) => {
+      if (![WalletType.CAT, WalletType.RCAT, WalletType.CRCAT].includes(item.type)) return false;
+      const meta = item?.meta || {};
+      const ticker = lower(meta.ticker);
+      const nm = lower(meta.name);
+      if (ticker === 'air') return true;
+      if (nm === 'air' || nm.includes('air')) return true;
+      return false;
+    });
+  }, [walletsData]);
+
   const nameWalletId = nameWallet?.id;
+  const sbxWalletId = sbxWallet?.id;
+  const airWalletId = airWallet?.id;
 
   const isRenewMode = useMemo(() => {
     const sp = new URLSearchParams(location.search);
     return sp.get('mode') === 'renew';
   }, [location.search]);
 
+  const isTripleUnderscore = useMemo(() => {
+    if (!name) return false;
+    const base = normalizeBaseName(name);
+    return countLeadingUnderscores(base) >= 3;
+  }, [name]);
+
   function handleBack() {
     navigate('/dashboard/names');
   }
 
   function handlePaymentMethodChange(event: React.ChangeEvent<HTMLInputElement>) {
-    setPaymentMethod(event.target.value as 'xch' | 'name');
+    setPaymentMethod(event.target.value as 'xch' | 'name' | 'sbx' | 'air');
   }
+
+  const loadPrices = async () => {
+    try {
+      const tiers = await getPrices();
+      setPricesList(tiers);
+    } catch (priceError) {
+      console.error('Failed to load prices:', priceError);
+      const errorMessage = priceError instanceof Error ? priceError.message : 'Unknown error';
+      setApiError(t`Failed to load pricing information: ${errorMessage}. Please try again later.`);
+    }
+  };
 
   useEffect(() => {
     (async () => {
       try {
         setApiError(null);
-        const [infoRes, tiers] = await Promise.all([getInfo(), getPrices()]);
-        setInfo({ paymentAddress: infoRes.paymentAddress });
-        setPricesList(tiers);
-        // Asset IDs are not provided by getPrices(); leaving NAME payments disabled until asset IDs source is added
+        const infoRes = await getInfo();
+        setInfo({ paymentAddress: infoRes.paymentAddress, publicKey: infoRes.publicKey });
+
+        // Load prices separately to handle failures gracefully
+        await loadPrices();
       } catch (e: any) {
         setApiError(e?.message || String(e));
       }
     })();
   }, [name]);
+
+  const { data: currentReceiveAddress } = useGetCurrentAddressQuery(
+    { walletId: standardWalletId as any },
+    { skip: !standardWalletId },
+  );
 
   async function handleRegister() {
     if (!name) return;
@@ -146,13 +235,14 @@ export default function NameRegistration() {
         throw new Error(t`Unexpected response format` as any);
       }
       const destAlias = info?.paymentAddress || 'namesdao.xch';
-      const address = await resolveNamesdaoName(destAlias);
-      let memos: string[] = [];
+      const paymentAddress = await resolveNamesdaoName(destAlias);
+      let payload: string | null = null;
       if (isRenewMode) {
         if (r.status === 'grace_period') {
-          memos = [`${name}.xch:${name}.xch`];
+          payload = `${name}.xch:${name}.xch`;
         } else if (r.status === 'available') {
-          memos = [name];
+          if (!currentReceiveAddress) throw new Error(t`Waiting for your receive address` as any);
+          payload = `${name}.xch:${currentReceiveAddress}`;
         } else {
           throw new Error(t`Cannot renew at this time` as any);
         }
@@ -160,8 +250,13 @@ export default function NameRegistration() {
         if (r.status !== 'available') {
           throw new Error(t`Name is no longer available` as any);
         }
-        memos = [name];
+        if (!currentReceiveAddress) throw new Error(t`Waiting for your receive address` as any);
+        payload = `${name}.xch:${currentReceiveAddress}`;
       }
+
+      const publicKey = info?.publicKey || NAMESDAO_RECIPIENT_PUBKEY;
+      const cloaked = await cloakMemo(payload, publicKey, true, 'register');
+      const memos: string[] = [cloaked];
       if (paymentMethod === 'xch') {
         if (!standardWalletId) throw new Error(t`No standard wallet found` as any);
         if (!totalXch) throw new Error(t`Missing XCH amount` as any);
@@ -169,7 +264,7 @@ export default function NameRegistration() {
         const feeMojo = chiaToMojo((fee || '0').trim() || '0');
         await sendTransaction({
           walletId: standardWalletId,
-          address,
+          address: paymentAddress,
           amount,
           fee: feeMojo,
           memos,
@@ -177,20 +272,59 @@ export default function NameRegistration() {
         }).unwrap();
         navigate('/dashboard/wallets');
       }
-      if (paymentMethod === 'name') {
-        if (!nameWalletId) throw new Error(t`Add the NAME token wallet to pay with NAME` as any);
-        if (!totalName) throw new Error(t`Missing NAME amount` as any);
-        const amount = catToMojo(new BigNumber(totalName));
+      const spendCatWith = async (
+        walletId: any,
+        total: string | null,
+        missingWalletMsg: string,
+        missingAmountMsg: string,
+      ) => {
+        if (!walletId) throw new Error(missingWalletMsg as any);
+        if (!total) throw new Error(missingAmountMsg as any);
+        const amount = catToMojo(new BigNumber(total));
         const feeMojo = chiaToMojo((fee || '0').trim() || '0');
         await spendCAT({
-          walletId: nameWalletId,
-          address,
+          walletId,
+          address: paymentAddress,
           amount,
           fee: feeMojo,
           memos,
           waitForConfirmation: true,
         }).unwrap();
         navigate('/dashboard/wallets');
+      };
+
+      const catPaymentMap: Record<
+        string,
+        { walletId: any; total: string | null; missingWalletMsg: string; missingAmountMsg: string }
+      > = {
+        name: {
+          walletId: nameWalletId,
+          total: totalName,
+          missingWalletMsg: t`Add the NAME token wallet to pay with NAME` as any,
+          missingAmountMsg: t`Missing NAME amount` as any,
+        },
+        sbx: {
+          walletId: sbxWalletId,
+          total: totalSbx,
+          missingWalletMsg: t`Add the SBX token wallet to pay with SBX` as any,
+          missingAmountMsg: t`Missing SBX amount` as any,
+        },
+        air: {
+          walletId: airWalletId,
+          total: totalAir,
+          missingWalletMsg: t`Add the AIR token wallet to pay with AIR` as any,
+          missingAmountMsg: t`Missing AIR amount` as any,
+        },
+      };
+
+      const catCfg = catPaymentMap[paymentMethod];
+      if (catCfg) {
+        await spendCatWith(
+          catCfg.walletId,
+          catCfg.total,
+          catCfg.missingWalletMsg as any,
+          catCfg.missingAmountMsg as any,
+        );
       }
     } catch (e: any) {
       setApiError(e?.message || String(e));
@@ -228,9 +362,15 @@ export default function NameRegistration() {
             <Typography variant="body1">
               <Trans>Amount:</Trans>{' '}
               {paymentMethod === 'xch' ? (
-                <strong>{totalXch ?? '?'} XCH</strong>
+                <strong>{totalDisplayXch ?? '?'} XCH</strong>
+              ) : paymentMethod === 'name' ? (
+                <strong>{totalDisplayName ?? '?'} NAME</strong>
+              ) : paymentMethod === 'sbx' ? (
+                <strong>{totalDisplaySbx ?? '?'} SBX</strong>
+              ) : paymentMethod === 'air' ? (
+                <strong>{totalDisplayAir ?? '?'} AIR</strong>
               ) : (
-                <strong>{totalName ?? '?'} NAME</strong>
+                <strong>?</strong>
               )}
             </Typography>
           </Box>
@@ -259,13 +399,33 @@ export default function NameRegistration() {
             </Typography>
 
             <RadioGroup value={paymentMethod} onChange={handlePaymentMethodChange}>
-              <FormControlLabel value="xch" control={<Radio />} label={t`Pay with XCH (${totalXch ?? '?'} XCH)`} />
+              <FormControlLabel
+                value="xch"
+                control={<Radio />}
+                label={t`Pay with XCH (${totalDisplayXch ?? '?'} XCH)`}
+              />
               <FormControlLabel
                 value="name"
                 control={<Radio />}
-                disabled={!(nameWalletId && totalName)}
-                label={t`Pay with NAME token (${totalName ?? '?'} NAME)`}
+                disabled={!(nameWalletId && totalName !== null)}
+                label={t`Pay with NAME token (${totalDisplayName ?? '?'} NAME)`}
               />
+              {isTripleUnderscore && (
+                <>
+                  <FormControlLabel
+                    value="sbx"
+                    control={<Radio />}
+                    disabled={!(sbxWalletId && totalSbx !== null)}
+                    label={t`Pay with SBX token (${totalDisplaySbx ?? '?'} SBX)`}
+                  />
+                  <FormControlLabel
+                    value="air"
+                    control={<Radio />}
+                    disabled={!(airWalletId && totalAir !== null)}
+                    label={t`Pay with AIR token (${totalDisplayAir ?? '?'} AIR)`}
+                  />
+                </>
+              )}
             </RadioGroup>
           </Box>
 
@@ -302,7 +462,15 @@ export default function NameRegistration() {
             <Button
               variant="contained"
               color="primary"
-              disabled={sending || (!totalXch && !totalName)}
+              disabled={
+                sending ||
+                !(
+                  (paymentMethod === 'xch' && totalXch) ||
+                  (paymentMethod === 'name' && totalName) ||
+                  (paymentMethod === 'sbx' && totalSbx) ||
+                  (paymentMethod === 'air' && totalAir)
+                )
+              }
               onClick={handleRegister}
             >
               {isRenewMode ? <Trans>Renew</Trans> : <Trans>Register</Trans>}

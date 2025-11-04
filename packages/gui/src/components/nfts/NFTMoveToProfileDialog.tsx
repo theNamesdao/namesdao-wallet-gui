@@ -24,6 +24,7 @@ import styled from 'styled-components';
 
 import { didToDIDId } from '../../util/dids';
 import removeHexPrefix from '../../util/removeHexPrefix';
+import { MIN_FEE_XCH, clampMinFeeMojo } from '../../utils/fees';
 import DIDProfileDropdown from '../did/DIDProfileDropdown';
 
 import NFTSummary from './NFTSummary';
@@ -66,7 +67,7 @@ export function NFTMoveToProfileAction(props: NFTMoveToProfileActionProps) {
     shouldUnregister: false,
     defaultValues: {
       destination: defaultDestination || '',
-      fee: '',
+      fee: MIN_FEE_XCH,
     },
   });
   const destination = methods.watch('destination');
@@ -121,7 +122,7 @@ export function NFTMoveToProfileAction(props: NFTMoveToProfileActionProps) {
 
   async function handleSubmit(formData: NFTMoveToProfileFormData) {
     const { destination: destinationLocal, fee } = formData;
-    const feeInMojos = chiaToMojo(fee || 0);
+    const feeInMojos = clampMinFeeMojo(chiaToMojo(fee || 0));
     let isValid = true;
 
     if (!destinationLocal || destinationLocal === currentDIDId) {

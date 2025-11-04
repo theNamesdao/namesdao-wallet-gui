@@ -6,7 +6,14 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
 import { checkAvailability } from '../../utils/namesdaoApi';
-import { getPrices, areFallbackPrices, type PriceTier } from '../../utils/priceService';
+import {
+  getPrices,
+  formatXchPrice,
+  formatNamePrice,
+  formatSbxPrice,
+  formatAirPrice,
+  type PriceTier,
+} from '../../utils/priceService';
 
 type FormData = {
   name: string;
@@ -22,12 +29,21 @@ export default function NameSearch() {
   const [error, setError] = useState<string | null>(null);
   const [inputName, setInputName] = useState('');
   const [prices, setPrices] = useState<PriceTier[] | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadPrices() {
+  const loadPrices = async () => {
+    try {
+      setPriceError(null);
       const priceData = await getPrices();
       setPrices(priceData);
+    } catch (priceErr) {
+      console.error('Failed to load prices:', priceErr);
+      const errorMessage = priceErr instanceof Error ? priceErr.message : 'Unknown error';
+      setPriceError(t`Failed to load pricing information: ${errorMessage}. Please try again later.`);
     }
+  };
+
+  useEffect(() => {
     loadPrices();
   }, []);
 
@@ -172,21 +188,40 @@ export default function NameSearch() {
               <Typography variant="h6" gutterBottom>
                 <Trans>Registration Fees</Trans>
               </Typography>
-              {!prices ? (
+              {!prices && !priceError ? (
                 <Loading size={24} />
+              ) : priceError ? (
+                <Flex flexDirection="column" gap={1}>
+                  <Typography variant="body2" color="error">
+                    {priceError}
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => {
+                      setPriceError(null);
+                      loadPrices();
+                    }}
+                  >
+                    <Trans>Retry</Trans>
+                  </Button>
+                </Flex>
               ) : (
                 <Flex flexDirection="column" gap={1}>
                   {prices.map((tier) => (
                     <Typography key={tier.label} variant="body2">
                       • <strong>{tier.label}:</strong>{' '}
-                      {tier.namePrice > 0 ? `${tier.namePrice} NAME or ${tier.xchPrice} XCH` : t`Free (1 mojo XCH)`}
+                      {tier.label.includes('3 underscores')
+                        ? // Triple underscore names show all payment options
+                          `${tier.namePrice > 0 ? `${formatNamePrice(tier.namePrice)} NAME` : ''}${tier.namePrice > 0 && (tier.sbxPrice ?? 0) > 0 ? ', ' : ''}${(tier.sbxPrice ?? 0) > 0 ? `${formatSbxPrice(tier.sbxPrice)} SBX` : ''}${(tier.namePrice > 0 || (tier.sbxPrice ?? 0) > 0) && (tier.airPrice ?? 0) > 0 ? ', ' : ''}${(tier.airPrice ?? 0) > 0 ? `${formatAirPrice(tier.airPrice)} AIR` : ''}${tier.namePrice > 0 || (tier.sbxPrice ?? 0) > 0 || (tier.airPrice ?? 0) > 0 ? ' or ' : ''}${formatXchPrice(tier.xchPrice)} XCH`
+                        : // Other names only show NAME/XCH options
+                          tier.namePrice > 0
+                          ? `${formatNamePrice(tier.namePrice)} NAME or ${formatXchPrice(tier.xchPrice)} XCH`
+                          : tier.xchPrice > 0
+                            ? `${formatXchPrice(tier.xchPrice)} XCH`
+                            : t`Free (1 mojo XCH)`}
                     </Typography>
                   ))}
-                  {areFallbackPrices(prices) && (
-                    <Typography variant="caption" color="textSecondary">
-                      <Trans>Showing cached prices - updates may be delayed</Trans>
-                    </Typography>
-                  )}
                 </Flex>
               )}
             </Box>

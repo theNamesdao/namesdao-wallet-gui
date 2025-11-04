@@ -76,17 +76,17 @@ export default function NFTTransferAction(props: NFTTransferActionProps) {
     const { destination: destinationLocal, fee } = formData;
     const feeInMojos = chiaToMojo(fee || 0);
 
+    let destinationResolved = (destinationLocal ?? '').trim();
+
     try {
       if (!currencyCode) {
         throw new Error('Selected network address prefix is not defined');
       }
       // Resolve Namesdao .xch on submit (safety net if blur didn't fire)
-      let destinationResolved = (destinationLocal ?? '').trim();
       try {
         const resolved = await resolveNamesdaoIfNeeded(destinationResolved, 'address');
         if (resolved !== destinationResolved) {
           destinationResolved = resolved;
-          methods.setValue('destination', destinationResolved, { shouldValidate: true });
         }
       } catch (err) {
         showError(err);
