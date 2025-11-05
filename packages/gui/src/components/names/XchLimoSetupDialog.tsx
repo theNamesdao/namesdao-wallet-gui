@@ -54,7 +54,8 @@ type SetupStep =
   | 'confirm-assign'
   | 'configure-website'
   | 'confirm-config-1'
-  | 'confirm-config-2';
+  | 'confirm-config-2'
+  | 'complete';
 
 type CreateDIDFormData = {
   name: string;
@@ -591,7 +592,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
         }
 
         if (secondConfirmed && !cancelled) {
-          setCurrentStep('configure-website');
+          setCurrentStep('complete');
           setConfirmationMessage('');
           setPendingNamesdao(null);
           setPendingHost(null);
@@ -822,6 +823,11 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
               </Trans>
             </Typography>
             <Box mt={3}>
+              {existingHost && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Trans>Currently on-chain:</Trans> {`https://${existingHost}`}
+                </Alert>
+              )}
               <Form
                 methods={websiteForm}
                 onSubmit={async (data: any) => {
@@ -837,7 +843,10 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
                     setPendingNamesdao(payload);
                     setPendingHost(normalized);
                     setPendingFeeMojo(feeMojo.toString());
-                    // Submit first tx; only advance to confirmation after success
+                    // Provide instant feedback while awaiting wallet and RPC
+                    setCurrentStep('confirm-config-1');
+                    setConfirmationMessage(t`Submitting configuration (1/2)...` as any);
+                    // Submit first tx
                     const res1: any = await updateDIDMetadata({
                       walletId: ownerWalletId,
                       metadata: { namesdao: payload },
@@ -848,10 +857,10 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
                       ? res1.transactions.map((tx: any) => tx?.name).filter(Boolean)
                       : [];
                     setPendingTxIds1(txIds1.length ? txIds1 : null);
-                    setCurrentStep('confirm-config-1');
                     setConfirmationMessage(t`Waiting for on-chain confirmation (first transaction)...` as any);
                   } catch (e: any) {
                     setError(e?.message || (t`Failed to submit configuration` as any));
+                    setCurrentStep('configure-website');
                   }
                 }}
               >
@@ -931,6 +940,38 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
           </Box>
         );
       }
+      case 'complete': {
+        // Show final success with current configured host
+        const namesdaoStr: string | undefined = (didMetadata as any)?.metadata?.namesdao;
+        const model = parseNamesdaoString(namesdaoStr);
+        const fqdn = `${name}.xch`;
+        const existingHost = getHostnameForName(model, fqdn) || pendingHost;
+        return (
+          <Box>
+            <Typography variant="body1" gutterBottom>
+              <Trans>Configuration complete</Trans>
+            </Typography>
+            <Alert severity="success" sx={{ mb: 2 }}>
+              <Trans>{name}.xch.limo is configured.</Trans>
+              {existingHost ? ` → https://${existingHost}` : ''}
+            </Alert>
+            <Flex gap={2}>
+              <Button
+                component="a"
+                href={`https://${name}.xch.limo`}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="outlined"
+              >
+                <Trans>Open {name}.xch.limo</Trans>
+              </Button>
+              <Button variant="contained" onClick={onClose}>
+                <Trans>Close</Trans>
+              </Button>
+            </Flex>
+          </Box>
+        );
+      }
       default:
         return null;
     }
@@ -947,6 +988,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       case 'configure-website':
       case 'confirm-config-1':
       case 'confirm-config-2':
+      case 'complete':
         return 2;
       default:
         return 0;
