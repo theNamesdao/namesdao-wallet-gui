@@ -1,30 +1,17 @@
 import type { NFTInfo } from '@chia-network/api';
-import { useGetHeightInfoQuery, useGetSyncStatusQuery, useGetDIDsQuery } from '@chia-network/api-react';
+import { useGetHeightInfoQuery, useGetSyncStatusQuery } from '@chia-network/api-react';
 import { Flex, Loading } from '@chia-network/core';
 import { Trans } from '@lingui/macro';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import {
-  Box,
-  Divider,
-  Typography,
-  IconButton,
-  Menu,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-} from '@mui/material';
+import { Box, Divider, Typography, IconButton, Menu, MenuItem } from '@mui/material';
 import React, { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import useMyNamesdaoNames from '../../hooks/useMyNamesdaoNames';
-import { didToDIDId } from '../../util/dids';
-import removeHexPrefix from '../../util/removeHexPrefix';
 import { GRACE_PERIOD_BLOCKS, formatDotXch } from '../../utils/namesdaoNames';
 import NFTMoveToProfileDialog from '../nfts/NFTMoveToProfileDialog';
+
+import XchLimoSetupDialog from './XchLimoSetupDialog';
 
 function underscorePrefixCount(name: string) {
   const m = name.match(/^_+/);
@@ -59,7 +46,6 @@ export default function NamesOwnedList() {
   const { entries, isLoading } = useMyNamesdaoNames();
   const { data: currentHeight, isLoading: isLoadingHeight } = useGetHeightInfoQuery();
   const { data: syncStatus, isLoading: isLoadingSync } = useGetSyncStatusQuery();
-  const { data: didWallets } = useGetDIDsQuery();
   const synced = !!syncStatus?.synced;
 
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -68,10 +54,9 @@ export default function NamesOwnedList() {
     status: 'active' | 'grace' | 'expired' | 'unknown';
   } | null>(null);
 
-  const [configureOpen, setConfigureOpen] = useState(false);
-  const [configureUrl, setConfigureUrl] = useState('');
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveNft, setMoveNft] = useState<NFTInfo | null>(null);
+  const [xchLimoSetupOpen, setXchLimoSetupOpen] = useState(false);
 
   const openMenu = useCallback(
     (event: React.MouseEvent<HTMLElement>, name: string, status: 'active' | 'grace' | 'expired' | 'unknown') => {
@@ -107,29 +92,9 @@ export default function NamesOwnedList() {
     closeMenu();
     if (!entry) return;
 
-    // Determine if owned by one of user's DIDs
-    const ownerDidHex = entry.nft.ownerDid || undefined;
-    const ownerDidId = ownerDidHex ? didToDIDId(removeHexPrefix(ownerDidHex)) : undefined;
-    const didList: any[] = (didWallets as any) || [];
-    const userDidIds = new Set<string>(didList.map((w: any) => w.myDid ?? w.mydid).filter(Boolean));
-
-    if (ownerDidId && userDidIds.has(ownerDidId)) {
-      // Eligible: open Configure dialog
-      setConfigureUrl('https://');
-      setConfigureOpen(true);
-      return;
-    }
-
-    if (didList.length > 0) {
-      // Has DID(s) but NFT not owned by a user DID -> prompt move to profile
-      setMoveNft(entry.nft);
-      setMoveOpen(true);
-      return;
-    }
-
-    // No DID -> navigate to create profile
-    navigate('/dashboard/settings/profiles/add');
-  }, [menuContext, closeMenu, entries, didWallets, navigate]);
+    // Open the unified setup dialog which handles all cases
+    setXchLimoSetupOpen(true);
+  }, [menuContext, closeMenu, entries]);
 
   const handleMoveToProfile = useCallback(() => {
     if (!menuContext) return;
@@ -316,29 +281,12 @@ export default function NamesOwnedList() {
         )}
       </Menu>
 
-      <Dialog open={configureOpen} onClose={() => setConfigureOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>
-          <Trans>Configure .xch.limo Website</Trans>
-        </DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            label={<Trans>Website URL</Trans>}
-            value={configureUrl}
-            onChange={(e) => setConfigureUrl(e.target.value)}
-            placeholder="https://example.com"
-            autoFocus
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfigureOpen(false)}>
-            <Trans>Cancel</Trans>
-          </Button>
-          <Button onClick={() => setConfigureOpen(false)} variant="contained" color="primary" disabled>
-            <Trans>Save</Trans>
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <XchLimoSetupDialog
+        open={xchLimoSetupOpen}
+        onClose={() => setXchLimoSetupOpen(false)}
+        name={menuContext?.name || ''}
+        nft={entries.find((e) => e.name === menuContext?.name)?.nft || ({} as NFTInfo)}
+      />
 
       <NFTMoveToProfileDialog open={moveOpen} onClose={() => setMoveOpen(false)} nfts={moveNft ? [moveNft] : []} />
     </Box>

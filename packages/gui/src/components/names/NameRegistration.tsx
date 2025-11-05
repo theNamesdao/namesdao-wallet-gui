@@ -270,7 +270,7 @@ export default function NameRegistration() {
           memos,
           waitForConfirmation: true,
         }).unwrap();
-        navigate('/dashboard/wallets');
+        navigate(`/dashboard/wallets/${standardWalletId}`);
       }
       const spendCatWith = async (
         walletId: any,
@@ -290,7 +290,7 @@ export default function NameRegistration() {
           memos,
           waitForConfirmation: true,
         }).unwrap();
-        navigate('/dashboard/wallets');
+        navigate(`/dashboard/wallets/${walletId}`);
       };
 
       const catPaymentMap: Record<
