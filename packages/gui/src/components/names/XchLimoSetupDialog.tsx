@@ -6,6 +6,7 @@ import {
   useGetNFTInfoQuery,
   useGetDIDMetadataQuery,
   useUpdateDIDMetadataMutation,
+  useGetTransactionAsyncMutation,
 } from '@chia-network/api-react';
 import { Form, Flex, EstimatedFee, chiaToMojo } from '@chia-network/core';
 import { Trans, t } from '@lingui/macro';
@@ -28,7 +29,7 @@ import { useForm } from 'react-hook-form';
 
 import { didToDIDId, didFromDIDId } from '../../util/dids';
 import removeHexPrefix from '../../util/removeHexPrefix';
-import { clampMinFeeMojo } from '../../utils/fees';
+import { clampMinFeeMojo, MIN_FEE_XCH } from '../../utils/fees';
 import {
   parseNamesdaoString,
   serializeNamesdao,
@@ -96,15 +97,31 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
     defaultValues: {
       name: `${name}.xch Profile`,
       amount: '0.000001',
-      fee: '',
+      fee: MIN_FEE_XCH,
     },
   });
 
   const websiteForm = useForm({
     defaultValues: {
       url: 'https://',
+      fee: MIN_FEE_XCH,
     },
   });
+
+  // Ensure fee defaults to 1 mojo if missing when entering steps
+  useEffect(() => {
+    if (open && currentStep === 'create-did') {
+      const v = createDIDForm.getValues('fee' as any) as any;
+      if (!v) createDIDForm.setValue('fee' as any, MIN_FEE_XCH as any, { shouldDirty: false } as any);
+    }
+  }, [open, currentStep, createDIDForm]);
+
+  useEffect(() => {
+    if (open && currentStep === 'configure-website') {
+      const v = websiteForm.getValues('fee' as any) as any;
+      if (!v) websiteForm.setValue('fee' as any, MIN_FEE_XCH as any, { shouldDirty: false } as any);
+    }
+  }, [open, currentStep, websiteForm]);
 
   // Helper: determine if the NFT owner DID (hex) belongs to the current wallet DIDs
   const ownedByUser = (ownerDidMaybe: string | undefined, walletsMaybe: any[] | undefined): boolean => {
@@ -156,11 +173,14 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
     { skip: !ownerWalletId },
   );
   const [updateDIDMetadata] = useUpdateDIDMetadataMutation();
+  const [getTransactionAsync] = useGetTransactionAsyncMutation();
 
   // Pending config state
   const [pendingNamesdao, setPendingNamesdao] = useState<string | null>(null);
   const [pendingHost, setPendingHost] = useState<string | null>(null);
-  const [pendingFeeMojo, setPendingFeeMojo] = useState<number | null>(null);
+  const [pendingFeeMojo, setPendingFeeMojo] = useState<string | null>(null);
+  const [pendingTxIds1, setPendingTxIds1] = useState<string[] | null>(null);
+  const [pendingTxIds2, setPendingTxIds2] = useState<string[] | null>(null);
 
   // Handle DID transaction confirmation (explicit 10s refetch loop)
   useEffect(() => {
@@ -168,6 +188,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
     let intervalId: any | null = null;
 
     const tick = async () => {
+      if (!open) return;
       try {
         const didRes: any = await refetchDIDs();
         const currentDIDs: any[] = (didRes as any)?.data || didWallets || [];
@@ -189,7 +210,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       }
     };
 
-    if (currentStep === 'confirm-did' && createdDIDId === 'pending') {
+    if (open && currentStep === 'confirm-did' && createdDIDId === 'pending') {
       tick();
       intervalId = setInterval(tick, 10_000);
     }
@@ -198,7 +219,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [currentStep, createdDIDId, didWallets, refetchDIDs]);
+  }, [open, currentStep, createdDIDId, didWallets, refetchDIDs]);
 
   // Handle NFT assignment confirmation (explicit 10s refetch loop)
   useEffect(() => {
@@ -206,6 +227,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
     let intervalId: any | null = null;
 
     const tick = async () => {
+      if (!open) return;
       try {
         const nftRes = await refetchNFTInfo();
         await refetchDIDs();
@@ -230,7 +252,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       }
     };
 
-    if (currentStep === 'confirm-assign' && selectedDIDId) {
+    if (open && currentStep === 'confirm-assign' && selectedDIDId) {
       tick();
       intervalId = setInterval(tick, 10_000);
     }
@@ -239,7 +261,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [currentStep, selectedDIDId, nft, liveNFTInfo, refetchNFTInfo, refetchDIDs]);
+  }, [open, currentStep, selectedDIDId, nft, liveNFTInfo, refetchNFTInfo, refetchDIDs]);
 
   // Safeguard: if a DID selection is active but UI shows assign menu, switch to confirmation
   useEffect(() => {
@@ -375,7 +397,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
           numOfBackupIdsNeeded: 0,
           name: data.name,
           amount: chiaToMojo(data.amount),
-          fee: feeInMojos,
+          fee: Number(feeInMojos),
         },
       }).unwrap();
 
@@ -420,7 +442,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
         walletId: (nft as any).walletId || 1,
         nftCoinIds: [removeHexPrefix(nftCoinIdRaw)],
         did: selectedDidId,
-        fee: feeInMojos,
+        fee: Number(feeInMojos),
       });
 
       // After submit succeeds, inform user we are waiting for on-chain confirmation
@@ -436,30 +458,62 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
 
   // (removed duplicate initial-step effect)
 
-  // Confirm Config 1: verify metadata then submit second tx
+  // Confirm Config 1: wait for first tx confirmation (via tx ids), then submit second tx
   useEffect(() => {
     let cancelled = false;
     let intervalId: any | null = null;
     const fqdn = `${name}.xch`;
 
     const tick = async () => {
+      if (!open) return;
       try {
-        const metaRes: any = await refetchDIDMetadata();
-        const latest = (metaRes as any)?.data ?? didMetadata;
-        const namesdaoStr: string | undefined = (latest as any)?.metadata?.namesdao;
-        const model = parseNamesdaoString(namesdaoStr);
-        const ok = pendingHost ? verifyNameConfigured(model, fqdn, pendingHost) : false;
-        if (ok && !cancelled && ownerWalletId && pendingNamesdao) {
+        let firstConfirmed = false;
+        if (pendingTxIds1 && pendingTxIds1.length > 0) {
+          const results = await Promise.all(
+            pendingTxIds1.map((txId) =>
+              getTransactionAsync({ transactionId: txId })
+                .unwrap()
+                .catch(() => null),
+            ),
+          );
+          if (cancelled) return;
+          const confirmedCount = results.reduce((acc: number, tx: any) => {
+            const ok = tx && (tx.confirmed || (typeof tx?.confirmedAtHeight === 'number' && tx.confirmedAtHeight > 0));
+            return acc + (ok ? 1 : 0);
+          }, 0);
+          firstConfirmed = confirmedCount === pendingTxIds1.length;
+          if (!firstConfirmed && currentStep === 'confirm-config-1') {
+            setConfirmationMessage(
+              `${t`Waiting for on-chain confirmation (first transaction)` as any}: ${confirmedCount}/${
+                pendingTxIds1.length
+              } confirmed...`,
+            );
+          }
+        } else {
+          // Fallback to metadata verification if tx ids are unavailable
+          const metaRes: any = await refetchDIDMetadata();
+          const latest = (metaRes as any)?.data ?? didMetadata;
+          const namesdaoStr: string | undefined = (latest as any)?.metadata?.namesdao;
+          const model = parseNamesdaoString(namesdaoStr);
+          firstConfirmed = pendingHost ? verifyNameConfigured(model, fqdn, pendingHost) : false;
+          if (!firstConfirmed && currentStep === 'confirm-config-1') {
+            setConfirmationMessage(t`Waiting for on-chain confirmation (first transaction)...` as any);
+          }
+        }
+
+        if (firstConfirmed && !cancelled && ownerWalletId && pendingNamesdao) {
           setConfirmationMessage(t`Submitting configuration (2/2)...` as any);
-          await updateDIDMetadata({
+          const res2: any = await updateDIDMetadata({
             walletId: ownerWalletId,
             metadata: { namesdao: pendingNamesdao },
-            fee: Number(pendingFeeMojo || 0),
+            fee: Number(clampMinFeeMojo(pendingFeeMojo || '0')),
             reusePuzhash: false,
-          });
+          }).unwrap();
+          const txIds2: string[] = Array.isArray(res2?.transactions)
+            ? res2.transactions.map((tx: any) => tx?.name).filter(Boolean)
+            : [];
+          setPendingTxIds2(txIds2.length ? txIds2 : null);
           setCurrentStep('confirm-config-2');
-        } else if (!cancelled && currentStep === 'confirm-config-1') {
-          setConfirmationMessage(t`Waiting for on-chain confirmation (first transaction)...` as any);
         }
       } catch (err) {
         if (!cancelled) {
@@ -469,7 +523,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       }
     };
 
-    if (currentStep === 'confirm-config-1' && ownerWalletId && pendingHost) {
+    if (open && currentStep === 'confirm-config-1' && ownerWalletId && pendingHost) {
       tick();
       intervalId = setInterval(tick, 10_000);
     }
@@ -479,38 +533,71 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       if (intervalId) clearInterval(intervalId);
     };
   }, [
+    open,
     currentStep,
     ownerWalletId,
     pendingHost,
     pendingNamesdao,
     pendingFeeMojo,
+    pendingTxIds1,
     name,
     refetchDIDMetadata,
     didMetadata,
     updateDIDMetadata,
+    getTransactionAsync,
   ]);
 
-  // Confirm Config 2: verify metadata again after second tx
+  // Confirm Config 2: wait for second tx confirmation (via tx ids)
   useEffect(() => {
     let cancelled = false;
     let intervalId: any | null = null;
     const fqdn = `${name}.xch`;
 
     const tick = async () => {
+      if (!open) return;
       try {
-        const metaRes: any = await refetchDIDMetadata();
-        const latest = (metaRes as any)?.data ?? didMetadata;
-        const namesdaoStr: string | undefined = (latest as any)?.metadata?.namesdao;
-        const model = parseNamesdaoString(namesdaoStr);
-        const ok = pendingHost ? verifyNameConfigured(model, fqdn, pendingHost) : false;
-        if (ok && !cancelled) {
+        let secondConfirmed = false;
+        if (pendingTxIds2 && pendingTxIds2.length > 0) {
+          const results = await Promise.all(
+            pendingTxIds2.map((txId) =>
+              getTransactionAsync({ transactionId: txId })
+                .unwrap()
+                .catch(() => null),
+            ),
+          );
+          if (cancelled) return;
+          const confirmedCount = results.reduce((acc: number, tx: any) => {
+            const ok = tx && (tx.confirmed || (typeof tx?.confirmedAtHeight === 'number' && tx.confirmedAtHeight > 0));
+            return acc + (ok ? 1 : 0);
+          }, 0);
+          secondConfirmed = confirmedCount === pendingTxIds2.length;
+          if (!secondConfirmed && currentStep === 'confirm-config-2') {
+            setConfirmationMessage(
+              `${t`Waiting for on-chain confirmation (second transaction)` as any}: ${confirmedCount}/${
+                pendingTxIds2.length
+              } confirmed...`,
+            );
+          }
+        } else {
+          // Fallback to metadata verification if tx ids are unavailable
+          const metaRes: any = await refetchDIDMetadata();
+          const latest = (metaRes as any)?.data ?? didMetadata;
+          const namesdaoStr: string | undefined = (latest as any)?.metadata?.namesdao;
+          const model = parseNamesdaoString(namesdaoStr);
+          secondConfirmed = pendingHost ? verifyNameConfigured(model, fqdn, pendingHost) : false;
+          if (!secondConfirmed && currentStep === 'confirm-config-2') {
+            setConfirmationMessage(t`Waiting for on-chain confirmation (second transaction)...` as any);
+          }
+        }
+
+        if (secondConfirmed && !cancelled) {
           setCurrentStep('configure-website');
           setConfirmationMessage('');
           setPendingNamesdao(null);
           setPendingHost(null);
           setPendingFeeMojo(null);
-        } else if (!cancelled && currentStep === 'confirm-config-2') {
-          setConfirmationMessage(t`Waiting for on-chain confirmation (second transaction)...` as any);
+          setPendingTxIds1(null);
+          setPendingTxIds2(null);
         }
       } catch (err) {
         if (!cancelled) {
@@ -520,7 +607,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       }
     };
 
-    if (currentStep === 'confirm-config-2' && ownerWalletId && pendingHost) {
+    if (open && currentStep === 'confirm-config-2' && ownerWalletId && pendingHost) {
       tick();
       intervalId = setInterval(tick, 10_000);
     }
@@ -529,7 +616,35 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [currentStep, ownerWalletId, pendingHost, name, refetchDIDMetadata, didMetadata]);
+  }, [
+    open,
+    currentStep,
+    ownerWalletId,
+    pendingHost,
+    name,
+    refetchDIDMetadata,
+    didMetadata,
+    pendingTxIds2,
+    getTransactionAsync,
+  ]);
+
+  // Reset state when dialog closes to avoid acting as if a transaction was submitted
+  useEffect(() => {
+    if (!open) {
+      setCurrentStep('create-did');
+      setIsCreating(false);
+      setIsAssigning(false);
+      setError(null);
+      setConfirmationMessage('');
+      setNftTransactionId(null);
+      setCreatedDIDId(null);
+      setSelectedDIDId(null);
+      setPendingNamesdao(null);
+      setPendingHost(null);
+      setPendingFeeMojo(null);
+      initializedRef.current = false;
+    }
+  }, [open]);
 
   const getStepContent = () => {
     switch (currentStep) {
@@ -715,21 +830,26 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
                     const normalized = normalizeHostname(data.url || '');
                     if (!normalized) throw new Error(t`Please enter a valid URL or hostname` as any);
                     if (!ownerWalletId) throw new Error(t`Missing profile wallet` as any);
-                    const feeMojo = clampMinFeeMojo(chiaToMojo(data.fee || '0'));
+                    const feeMojo = clampMinFeeMojo(chiaToMojo(data.fee || MIN_FEE_XCH));
                     const current = parseNamesdaoString((didMetadata as any)?.metadata?.namesdao);
                     const merged = mergeName(current, fqdn, normalized);
                     const payload = serializeNamesdao(merged);
                     setPendingNamesdao(payload);
                     setPendingHost(normalized);
-                    setPendingFeeMojo(Number(feeMojo));
-                    setCurrentStep('confirm-config-1');
-                    setConfirmationMessage(t`Submitting configuration (1/2)...` as any);
-                    await updateDIDMetadata({
+                    setPendingFeeMojo(feeMojo.toString());
+                    // Submit first tx; only advance to confirmation after success
+                    const res1: any = await updateDIDMetadata({
                       walletId: ownerWalletId,
                       metadata: { namesdao: payload },
                       fee: Number(feeMojo),
                       reusePuzhash: false,
-                    });
+                    }).unwrap();
+                    const txIds1: string[] = Array.isArray(res1?.transactions)
+                      ? res1.transactions.map((tx: any) => tx?.name).filter(Boolean)
+                      : [];
+                    setPendingTxIds1(txIds1.length ? txIds1 : null);
+                    setCurrentStep('confirm-config-1');
+                    setConfirmationMessage(t`Waiting for on-chain confirmation (first transaction)...` as any);
                   } catch (e: any) {
                     setError(e?.message || (t`Failed to submit configuration` as any));
                   }
@@ -786,6 +906,8 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
               </Typography>
               <Alert severity="info">
                 <Trans>Waiting for on-chain confirmation (first transaction). This typically takes 1-2 minutes.</Trans>
+                <br />
+                <Trans>After it confirms, you will be prompted to approve the second transaction.</Trans>
               </Alert>
             </Box>
           </Box>
