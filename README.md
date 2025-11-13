@@ -143,7 +143,7 @@ Do not edit files directly in the repo, but instead please head over to our [Cro
 ```
 export CHIA_ROOT=~/.chia/simulator/main
 export CHIA_SIMULATOR_ROOT=~/.chia/simulator
-export CHIA_KEYS_ROOT=~/.chia_keys_simulator
+export NAMESDAO_WALLET_KEYS_ROOT=~/.namesdao_wallet_keys_simulator
 ```
 
 3. `. ./activate`
