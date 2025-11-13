@@ -103,7 +103,7 @@ export default {
     MuiChip: {
       variants: [
         {
-          props: { size: 'extraSmall' },
+          props: { size: 'small' },
           style: {
             height: '20px',
             fontSize: '0.75rem',

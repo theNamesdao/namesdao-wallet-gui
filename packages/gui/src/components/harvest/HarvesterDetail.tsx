@@ -1,5 +1,5 @@
 import { HarvesterInfo, LatencyData } from '@chia-network/api';
-import { Flex, FormatBytes, Tooltip, TooltipIcon } from '@chia-network/core';
+import { Flex, FormatBytes, Tooltip, TooltipIcon, Color } from '@chia-network/core';
 import { Trans } from '@lingui/macro';
 import { Box, Paper, Typography, LinearProgress, Chip } from '@mui/material';
 import BigNumber from 'bignumber.js';
@@ -142,7 +142,7 @@ function HarvesterLatencyGraph(props: HarvesterLatencyGraphProps) {
                       <LinearProgress
                         variant="determinate"
                         value={totalSpaceOccupation?.toNumber()}
-                        sx={{ height: 20, '& > span': { backgroundColor: '#1a8284' } }}
+                        sx={{ height: 20, '& > span': { backgroundColor: Color.Green[500] } }}
                       />
                     </Box>
                   </td>
@@ -176,7 +176,7 @@ function HarvesterLatencyGraph(props: HarvesterLatencyGraphProps) {
                       <LinearProgress
                         variant="determinate"
                         value={effectiveSpaceOccupation?.toNumber()}
-                        sx={{ height: 20, '& > span': { backgroundColor: '#5ece71' } }}
+                        sx={{ height: 20, '& > span': { backgroundColor: Color.Lime[600] } }}
                       />
                     </Box>
                   </td>

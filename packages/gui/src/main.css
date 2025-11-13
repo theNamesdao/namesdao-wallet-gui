@@ -3,13 +3,25 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background-color: #ffffff;
-  --text-color: #000000;
+  --background-color: #0a0e27;
+  --text-color: #e0e7ff;
+  --primary-color: #00d4ff;
+  --secondary-color: #9d4edd;
+  --accent-color: #ff6b35;
+  --surface-color: #151932;
+  --border-color: rgba(0, 212, 255, 0.3);
+  --glass-bg: rgba(21, 25, 50, 0.8);
 }
 
 .dark {
-  --background-color: #0f252a;
-  --text-color: #ffffff;
+  --background-color: #0a0e27;
+  --text-color: #e0e7ff;
+  --primary-color: #00d4ff;
+  --secondary-color: #9d4edd;
+  --accent-color: #ff6b35;
+  --surface-color: #151932;
+  --border-color: rgba(0, 212, 255, 0.3);
+  --glass-bg: rgba(21, 25, 50, 0.8);
 }
 
 html,
@@ -21,4 +33,96 @@ body {
   margin: 0;
   padding: 0;
   font-size: 14px;
+  font-family:
+    "Inter",
+    "SF Pro Display",
+    -apple-system,
+    sans-serif;
+}
+
+/* Neo-inspired global styles */
+.MuiAppBar-root {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color) !important;
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.2) !important;
+}
+
+.MuiCard-root {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.1) !important;
+}
+
+.MuiCard-root:hover {
+  border-color: rgba(157, 78, 221, 0.5) !important;
+  box-shadow: 0 0 25px rgba(157, 78, 221, 0.2) !important;
+}
+
+.MuiButton-containedPrimary {
+  background: var(--primary-color) !important;
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.5) !important;
+  color: var(--background-color) !important;
+  font-weight: 600 !important;
+}
+
+.MuiButton-containedPrimary:hover {
+  background: #00a8cc !important;
+  box-shadow: 0 0 25px rgba(0, 212, 255, 0.7) !important;
+}
+
+.MuiButton-containedSecondary {
+  background: var(--secondary-color) !important;
+  box-shadow: 0 0 15px rgba(157, 78, 221, 0.4) !important;
+  color: #ffffff !important;
+}
+
+.MuiButton-containedSecondary:hover {
+  background: #7c3aed !important;
+  box-shadow: 0 0 25px rgba(157, 78, 221, 0.6) !important;
+}
+
+.MuiTypography-root {
+  color: var(--text-color) !important;
+}
+
+.MuiTypography-colorTextSecondary {
+  color: #a5b4fc !important;
+}
+
+.MuiPaper-root {
+  background: var(--surface-color) !important;
+}
+
+.MuiInputBase-root {
+  background: rgba(30, 37, 71, 0.5) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 4px !important;
+}
+
+.MuiInputBase-root:focus-within {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.3) !important;
+}
+
+.MuiTableCell-root {
+  border-bottom: 1px solid var(--border-color) !important;
+  color: var(--text-color) !important;
+}
+
+.MuiTableHead-root .MuiTableCell-root {
+  color: var(--primary-color) !important;
+  font-weight: 600 !important;
+}
+
+.MuiDivider-root {
+  background: var(--border-color) !important;
+}
+
+.MuiChip-root {
+  background: rgba(0, 212, 255, 0.1) !important;
+  color: var(--primary-color) !important;
+  border: 1px solid var(--border-color) !important;
 }

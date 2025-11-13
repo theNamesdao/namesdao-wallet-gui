@@ -24,7 +24,7 @@ import {
   TextField,
   CircularProgress,
 } from '@mui/material';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { didToDIDId, didFromDIDId } from '../../util/dids';
@@ -109,6 +109,24 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
     },
   });
 
+  const resolveExistingHost = useCallback((model: any, nameToCheck: string): string | undefined => {
+    const fqdnFor = (nm: string) => (nm && nm.endsWith('.xch') ? nm : `${nm}.xch`);
+    const candidates: string[] = [];
+    const primary = fqdnFor(nameToCheck);
+    candidates.push(primary);
+    if (nameToCheck && nameToCheck.endsWith('.xch')) {
+      const without = nameToCheck.replace(/\.xch$/, '');
+      if (without) candidates.push(without);
+    } else if (nameToCheck) {
+      candidates.push(nameToCheck);
+    }
+    for (const key of candidates) {
+      const h = getHostnameForName(model, key);
+      if (h) return h;
+    }
+    return undefined;
+  }, []);
+
   // Ensure fee defaults to 1 mojo if missing when entering steps
   useEffect(() => {
     if (open && currentStep === 'create-did') {
@@ -160,10 +178,17 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
     return userHexes.has(ownerHex);
   };
 
-  // Resolve owner DID walletId from NFT owner
-  const ownerDidHex = nft.ownerDid || undefined;
-  const ownerHexNoPrefix = ownerDidHex ? removeHexPrefix(ownerDidHex) : undefined;
-  const ownerBech = ownerHexNoPrefix ? didToDIDId(ownerHexNoPrefix) : undefined;
+  // Resolve owner DID walletId from NFT owner (prefer live info, fallback to nft, then minter DID)
+  const sourceForOwner: any = (liveNFTInfo ?? nft) as any;
+  const ownerDidMaybe = sourceForOwner?.ownerDid || sourceForOwner?.minterDid || undefined;
+  let ownerBech: string | undefined;
+  if (typeof ownerDidMaybe === 'string' && ownerDidMaybe.startsWith('did:chia:')) {
+    ownerBech = ownerDidMaybe;
+  } else if (ownerDidMaybe) {
+    ownerBech = didToDIDId(removeHexPrefix(ownerDidMaybe));
+  } else {
+    ownerBech = undefined;
+  }
   const didListAny: any[] = didWallets || [];
   const ownerWallet = didListAny.find((w: any) => (w.myDid ?? w.mydid) === ownerBech);
   const ownerWalletId: number | undefined = ownerWallet?.id;
@@ -176,12 +201,41 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
   const [updateDIDMetadata] = useUpdateDIDMetadataMutation();
   const [getTransactionAsync] = useGetTransactionAsyncMutation();
 
+  useEffect(() => {
+    if (!open) return;
+    if (currentStep !== 'configure-website') return;
+    if (ownerWalletId) refetchDIDMetadata();
+  }, [open, currentStep, ownerWalletId, refetchDIDMetadata]);
+
   // Pending config state
   const [pendingNamesdao, setPendingNamesdao] = useState<string | null>(null);
   const [pendingHost, setPendingHost] = useState<string | null>(null);
   const [pendingFeeMojo, setPendingFeeMojo] = useState<string | null>(null);
   const [pendingTxIds1, setPendingTxIds1] = useState<string[] | null>(null);
   const [pendingTxIds2, setPendingTxIds2] = useState<string[] | null>(null);
+  const [onChainHost, setOnChainHost] = useState<string | null>(null);
+
+  // Prefill URL from on-chain metadata when entering configure step (after metadata is available)
+  useEffect(() => {
+    if (!open) return;
+    if (currentStep !== 'configure-website') return;
+    const namesdaoStr: string | undefined = (didMetadata as any)?.metadata?.namesdao;
+    const model = parseNamesdaoString(namesdaoStr);
+    const existingHost = resolveExistingHost(model, name);
+    setOnChainHost(existingHost ?? null);
+    const fieldState = websiteForm.getFieldState('url' as any);
+    if (!fieldState?.isDirty) {
+      if (existingHost) {
+        const currentVal = websiteForm.getValues('url' as any) as any;
+        if (currentVal !== `https://${existingHost}`) {
+          websiteForm.setValue('url' as any, `https://${existingHost}` as any, { shouldDirty: false } as any);
+        }
+      } else {
+        const currentVal = websiteForm.getValues('url' as any) as any;
+        if (!currentVal) websiteForm.setValue('url' as any, 'https://' as any, { shouldDirty: false } as any);
+      }
+    }
+  }, [open, currentStep, didMetadata, name, websiteForm, resolveExistingHost, setOnChainHost]);
 
   // Handle DID transaction confirmation (explicit 10s refetch loop)
   useEffect(() => {
@@ -287,8 +341,8 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       !selectedDIDId
     ) {
       const source = (liveNFTInfo ?? nft) as any;
-      const ownerDidMaybe = source?.ownerDid ?? source?.minterDid;
-      if (ownedByUser(ownerDidMaybe, didWallets)) {
+      const ownerDidMaybeLocal = source?.ownerDid || source?.minterDid;
+      if (ownedByUser(ownerDidMaybeLocal, didWallets)) {
         setCurrentStep('configure-website');
       }
       // Do not force 'assign-nft' here; let init() decide after fresh refetch
@@ -302,8 +356,8 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
     if (isAssigning) return;
     if (!Array.isArray(didWallets) || didWallets.length === 0) return;
     const source = (liveNFTInfo ?? nft) as any;
-    const ownerDidMaybe = source?.ownerDid ?? source?.minterDid;
-    if (ownedByUser(ownerDidMaybe, didWallets)) {
+    const ownerDidMaybeLocal = source?.ownerDid || source?.minterDid;
+    if (ownedByUser(ownerDidMaybeLocal, didWallets)) {
       setCurrentStep('configure-website');
     }
   }, [open, currentStep, isAssigning, didWallets, liveNFTInfo, nft]);
@@ -342,7 +396,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
         }
         const nftRes = await refetchNFTInfo();
         const sourceNFT: any = (nftRes as any)?.data ?? liveNFTInfo ?? nft;
-        const ownerDidHexLocal = (sourceNFT?.ownerDid ?? sourceNFT?.minterDid) || undefined;
+        const ownerDidHexLocal = sourceNFT?.ownerDid || sourceNFT?.minterDid || undefined;
 
         let nextStep: SetupStep;
         if (ownedByUser(ownerDidHexLocal, didList)) {
@@ -443,7 +497,7 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
         walletId: (nft as any).walletId || 1,
         nftCoinIds: [removeHexPrefix(nftCoinIdRaw)],
         did: selectedDidId,
-        fee: Number(feeInMojos),
+        fee: feeInMojos,
       });
 
       // After submit succeeds, inform user we are waiting for on-chain confirmation
@@ -643,9 +697,12 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
       setPendingNamesdao(null);
       setPendingHost(null);
       setPendingFeeMojo(null);
+      setOnChainHost(null);
+      // Reset website form so prefill logic can apply on next open
+      websiteForm.reset({ url: 'https://', fee: MIN_FEE_XCH } as any, { keepDirty: false } as any);
       initializedRef.current = false;
     }
-  }, [open]);
+  }, [open, websiteForm]);
 
   const getStepContent = () => {
     switch (currentStep) {
@@ -808,8 +865,9 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
         // Prefill
         const namesdaoStr: string | undefined = (didMetadata as any)?.metadata?.namesdao;
         const model = parseNamesdaoString(namesdaoStr);
-        const fqdn = `${name}.xch`;
+        const fqdn = name && name.endsWith('.xch') ? name : `${name}.xch`;
         const existingHost = getHostnameForName(model, fqdn);
+        const effectiveHost = onChainHost ?? existingHost;
         if (existingHost) {
           const currentVal = websiteForm.getValues('url');
           if (!currentVal || currentVal === 'https://') websiteForm.setValue('url', `https://${existingHost}`);
@@ -823,9 +881,9 @@ export default function XchLimoSetupDialog({ open, onClose, name, nft }: XchLimo
               </Trans>
             </Typography>
             <Box mt={3}>
-              {existingHost && (
+              {effectiveHost && (
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  <Trans>Currently on-chain:</Trans> {`https://${existingHost}`}
+                  <Trans>Currently on-chain:</Trans> {`https://${effectiveHost}`}
                 </Alert>
               )}
               <Form
